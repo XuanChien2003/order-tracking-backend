@@ -1,0 +1,203 @@
+const ExcelJS = require('exceljs');
+const { Order, OrderEvent } = require('../../domain/models');
+const { generateInternalCode } = require('../utils/internalCode.util');
+const { sha256Hex } = require('../utils/hash.util');
+const AppError = require('../errors/AppError');
+
+const MAX_ROWS = 500;
+const MAX_INTERNAL_CODE_ATTEMPTS = 5;
+
+const COLUMN_ALIASES = {
+  vtpcode: 'vtpCode',
+  receivername: 'receiverName',
+  receiverphone: 'receiverPhone',
+  receiveraddress: 'receiverAddress',
+  productinfo: 'productInfo',
+  weightkg: 'weightKg',
+};
+const REQUIRED_FIELDS = ['vtpCode', 'receiverName'];
+
+function cellToString(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') {
+    if (Array.isArray(value.richText)) return value.richText.map((t) => t.text).join('');
+    if (value.text !== undefined) return String(value.text).trim();
+    if (value.result !== undefined) return String(value.result).trim();
+    if (value instanceof Date) return value.toISOString();
+    return String(value).trim();
+  }
+  return String(value).trim();
+}
+
+function buildColumnMap(headerRow) {
+  const map = {};
+  headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+    const key = cellToString(cell.value).toLowerCase().replace(/[^a-z]/g, '');
+    if (COLUMN_ALIASES[key]) {
+      map[colNumber] = COLUMN_ALIASES[key];
+    }
+  });
+  return map;
+}
+
+async function createOrderWithUniqueCode({ vtpCode, partnerObjectId, receiverName, receiverPhone, receiverAddress, productInfo, weightKg, now }) {
+  for (let attempt = 0; attempt < MAX_INTERNAL_CODE_ATTEMPTS; attempt += 1) {
+    const internalCode = generateInternalCode(now);
+    try {
+      const order = await Order.create({
+        internalCode,
+        vtpCode,
+        partnerId: partnerObjectId,
+        receiverName,
+        receiverPhone,
+        receiverAddress,
+        productInfo,
+        weightKg,
+        currentStatus: 'imported',
+        currentStatusDate: now,
+      });
+      return { order, error: null };
+    } catch (err) {
+      if (err.code === 11000 && err.keyValue && err.keyValue.internalCode) {
+        continue; // collision on the random code, retry with a fresh one
+      }
+      if (err.code === 11000 && err.keyValue && err.keyValue.vtpCode) {
+        return { order: null, error: 'vtpCode đã tồn tại trong hệ thống' };
+      }
+      return { order: null, error: 'Lỗi khi tạo đơn hàng' };
+    }
+  }
+  return { order: null, error: 'Không thể sinh mã đơn hàng, vui lòng thử lại' };
+}
+
+// FR-03: import up to 500 rows/call, one order + one orderEvents(source=import) per valid row.
+// Never aborts the whole batch on a single bad row - each row gets its own success/error result.
+async function importOrdersFromExcel({ fileBuffer, partnerObjectId, actorUserObjectId }) {
+  const workbook = new ExcelJS.Workbook();
+  try {
+    await workbook.xlsx.load(fileBuffer);
+  } catch (err) {
+    throw new AppError('File Excel không hợp lệ', 400);
+  }
+
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) {
+    throw new AppError('File Excel không có dữ liệu', 400);
+  }
+
+  const columnMap = buildColumnMap(worksheet.getRow(1));
+  const mappedFields = new Set(Object.values(columnMap));
+  const missingRequired = REQUIRED_FIELDS.filter((field) => !mappedFields.has(field));
+  if (missingRequired.length > 0) {
+    throw new AppError(`Thiếu cột bắt buộc: ${missingRequired.join(', ')}`, 400);
+  }
+
+  const dataRowNumbers = [];
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) return;
+    dataRowNumbers.push(rowNumber);
+  });
+
+  if (dataRowNumbers.length === 0) {
+    throw new AppError('File Excel không có dòng dữ liệu nào', 400);
+  }
+  if (dataRowNumbers.length > MAX_ROWS) {
+    throw new AppError(`Chỉ hỗ trợ tối đa ${MAX_ROWS} dòng/lần import`, 400);
+  }
+
+  const seenInFile = new Set();
+  const results = [];
+  const now = new Date();
+
+  for (const rowNumber of dataRowNumbers) {
+    const row = worksheet.getRow(rowNumber);
+    const record = {};
+    Object.entries(columnMap).forEach(([colNumber, field]) => {
+      record[field] = cellToString(row.getCell(Number(colNumber)).value);
+    });
+
+    const vtpCode = record.vtpCode || '';
+    const receiverName = record.receiverName || '';
+
+    if (!vtpCode) {
+      results.push({ row: rowNumber, success: false, error: 'vtpCode không được để trống' });
+      continue;
+    }
+    if (!receiverName) {
+      results.push({ row: rowNumber, success: false, error: 'receiverName không được để trống' });
+      continue;
+    }
+
+    let weightKg = null;
+    if (record.weightKg) {
+      const parsedWeight = Number(record.weightKg);
+      if (Number.isNaN(parsedWeight) || parsedWeight < 0) {
+        results.push({ row: rowNumber, success: false, error: 'weightKg phải là số >= 0' });
+        continue;
+      }
+      weightKg = parsedWeight;
+    }
+
+    if (seenInFile.has(vtpCode)) {
+      results.push({ row: rowNumber, success: false, error: 'vtpCode bị trùng trong file' });
+      continue;
+    }
+    seenInFile.add(vtpCode);
+
+    // eslint-disable-next-line no-await-in-loop
+    const existing = await Order.findOne({ vtpCode }).select('_id').lean();
+    if (existing) {
+      results.push({ row: rowNumber, success: false, error: 'vtpCode đã tồn tại trong hệ thống' });
+      continue;
+    }
+
+    // eslint-disable-next-line no-await-in-loop
+    const { order, error } = await createOrderWithUniqueCode({
+      vtpCode,
+      partnerObjectId,
+      receiverName,
+      receiverPhone: record.receiverPhone || null,
+      receiverAddress: record.receiverAddress || null,
+      productInfo: record.productInfo || null,
+      weightKg,
+      now,
+    });
+    if (!order) {
+      results.push({ row: rowNumber, success: false, error });
+      continue;
+    }
+
+    const contentHash = sha256Hex(`import:${vtpCode}:${order.internalCode}`);
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await OrderEvent.create({
+        orderId: order._id,
+        source: 'import',
+        eventType: 'import',
+        actorUserId: actorUserObjectId,
+        rawPayload: record,
+        contentHash,
+        eventTime: now,
+        receivedAt: now,
+      });
+    } catch (err) {
+      // Keep invariant #1 in PROJECT_CONTEXT.md 3.4: every order must have an import event.
+      // eslint-disable-next-line no-await-in-loop
+      await Order.deleteOne({ _id: order._id });
+      results.push({ row: rowNumber, success: false, error: 'Lỗi khi ghi lịch sử import, đã hủy dòng này' });
+      continue;
+    }
+
+    results.push({ row: rowNumber, success: true, internalCode: order.internalCode, vtpCode: order.vtpCode });
+  }
+
+  const successCount = results.filter((r) => r.success).length;
+  return {
+    totalRows: results.length,
+    successCount,
+    failureCount: results.length - successCount,
+    results,
+  };
+}
+
+module.exports = { importOrdersFromExcel, MAX_ROWS };

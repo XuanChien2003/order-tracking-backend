@@ -5,7 +5,7 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
 function toOrderPublic(order, partnerMap) {
-  const partnerInfo = partnerMap.get(String(order.partnerId));
+  const partnerInfo = partnerMap ? partnerMap.get(String(order.partnerId)) : null;
   return {
     internalCode: order.internalCode,
     vtpCode: order.vtpCode,
@@ -15,6 +15,14 @@ function toOrderPublic(order, partnerMap) {
     receiverAddress: order.receiverAddress,
     productInfo: order.productInfo,
     weightKg: order.weightKg,
+    serviceName: order.serviceName || null,
+    cod: order.cod ?? null,
+    shippingFee: order.shippingFee ?? null,
+    vat: order.vat ?? null,
+    totalAmount: order.totalAmount ?? null,
+    paymentType: order.paymentType || null,
+    actorName: order.actorName || null,
+    actorPhone: order.actorPhone || null,
     currentStatus: order.currentStatus,
     currentStatusDate: order.currentStatusDate,
     createdAt: order.createdAt,
@@ -23,14 +31,15 @@ function toOrderPublic(order, partnerMap) {
 }
 
 async function attachPartnerInfo(orders) {
-  const partnerIds = [...new Set(orders.map((o) => String(o.partnerId)))];
-  const partners = await Partner.find({ _id: { $in: partnerIds } }).select('publicId companyName').lean();
+  const partnerIds = [...new Set(orders.map((o) => String(o.partnerId)).filter(Boolean))];
+  const partners = partnerIds.length
+    ? await Partner.find({ _id: { $in: partnerIds } }).select('publicId companyName').lean()
+    : [];
   const map = new Map(partners.map((p) => [String(p._id), p]));
   return orders.map((o) => toOrderPublic(o, map));
 }
 
 // FR-08: partner only sees its own orders; admin is unrestricted.
-// v1 only supports exact match on indexed columns: internalCode, vtpCode, receiverPhone.
 async function listOrders({ requester, query }) {
   const filter = {};
 
@@ -46,10 +55,18 @@ async function listOrders({ requester, query }) {
     filter.partnerId = partner._id;
   }
 
-  if (query.internalCode) filter.internalCode = String(query.internalCode).trim();
-  if (query.vtpCode) filter.vtpCode = String(query.vtpCode).trim();
-  if (query.receiverPhone) filter.receiverPhone = String(query.receiverPhone).trim();
-  if (query.currentStatus) filter.currentStatus = String(query.currentStatus).trim();
+  if (query.internalCode) {
+    const term = String(query.internalCode).trim();
+    filter.$or = [
+      { internalCode: { $regex: term, $options: 'i' } },
+      { vtpCode: { $regex: term, $options: 'i' } },
+      { receiverName: { $regex: term, $options: 'i' } },
+      { receiverPhone: { $regex: term, $options: 'i' } },
+    ];
+  }
+  if (query.vtpCode) filter.vtpCode = { $regex: String(query.vtpCode).trim(), $options: 'i' };
+  if (query.receiverPhone) filter.receiverPhone = { $regex: String(query.receiverPhone).trim(), $options: 'i' };
+  if (query.currentStatus) filter.currentStatus = { $regex: String(query.currentStatus).trim(), $options: 'i' };
 
   const page = Math.max(1, Number(query.page) || 1);
   const limit = Math.min(MAX_LIMIT, Math.max(1, Number(query.limit) || DEFAULT_LIMIT));
@@ -85,7 +102,6 @@ async function getOrderDetail({ requester, internalCode }) {
   if (requester.role === 'partner') {
     const partner = await Partner.findOne({ publicId: requester.partnerId }).select('_id').lean();
     if (!partner || String(order.partnerId) !== String(partner._id)) {
-      // 404 instead of 403 so we don't leak which internalCodes exist for other partners
       throw new AppError('Không tìm thấy đơn hàng', 404);
     }
   }
@@ -94,7 +110,9 @@ async function getOrderDetail({ requester, internalCode }) {
 
   const events = await OrderEvent.find({ orderId: order._id }).sort({ eventTime: -1 }).lean();
   const actorIds = [...new Set(events.filter((e) => e.actorUserId).map((e) => String(e.actorUserId)))];
-  const actors = await User.find({ _id: { $in: actorIds } }).select('publicId displayName').lean();
+  const actors = actorIds.length
+    ? await User.find({ _id: { $in: actorIds } }).select('publicId displayName').lean()
+    : [];
   const actorMap = new Map(actors.map((a) => [String(a._id), a]));
 
   return {

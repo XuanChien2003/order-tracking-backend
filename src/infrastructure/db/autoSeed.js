@@ -1,10 +1,7 @@
-require('dotenv').config();
-const mongoose = require('mongoose');
 const crypto = require('crypto');
-const { connectDb } = require('../src/infrastructure/db/mongoose');
-const { User, Partner, Order, OrderEvent } = require('../src/domain/models');
-const { hashPassword } = require('../src/application/services/password.service');
-const { generatePublicId } = require('../src/application/utils/publicId.util');
+const { User, Partner, Order, OrderEvent } = require('../../domain/models');
+const { hashPassword } = require('../../application/services/password.service');
+const { generatePublicId } = require('../../application/utils/publicId.util');
 
 const SEED_ACCOUNTS = [
   {
@@ -157,105 +154,97 @@ const SAMPLE_ORDERS = [
   },
 ];
 
-async function seed() {
-  await connectDb();
+async function ensureInitialData() {
+  try {
+    // 1. Seed accounts
+    for (const account of SEED_ACCOUNTS) {
+      const existing = await User.findOne({ username: account.username });
+      if (!existing) {
+        const passwordHash = await hashPassword(account.password);
+        await User.create({
+          publicId: generatePublicId(),
+          username: account.username,
+          passwordHash,
+          role: account.role,
+          displayName: account.displayName,
+          isActive: true,
+        });
+      }
+    }
 
-  // 1. Seed accounts
-  for (const account of SEED_ACCOUNTS) {
-    const existing = await User.findOne({ username: account.username });
-    if (!existing) {
-      const passwordHash = await hashPassword(account.password);
-      await User.create({
-        publicId: generatePublicId(),
-        username: account.username,
-        passwordHash,
-        role: account.role,
-        displayName: account.displayName,
+    // 2. Seed Partner
+    let partner = await Partner.findOne();
+    if (!partner) {
+      partner = await Partner.create({
+        publicId: 'PARTNER01',
+        companyName: 'Viettel Post Partner',
+        email: 'partner@vtp.vn',
+        phone: '0988888888',
+        secretKeyHash: await hashPassword('PartnerSecret@123'),
         isActive: true,
       });
-      console.log(`[seed] Đã tạo tài khoản ${account.role}: ${account.username}`);
     }
-  }
 
-  // 2. Seed default Partner
-  let partner = await Partner.findOne();
-  if (!partner) {
-    partner = await Partner.create({
-      publicId: 'PARTNER01',
-      companyName: 'Viettel Post Partner',
-      email: 'partner@vtp.vn',
-      phone: '0988888888',
-      secretKeyHash: await hashPassword('PartnerSecret@123'),
-      isActive: true,
-    });
-    console.log('[seed] Đã tạo Partner mặc định: PARTNER01');
-  }
+    // 3. Seed orders if DB has fewer than 2 orders
+    const orderCount = await Order.countDocuments();
+    if (orderCount < 2) {
+      for (const item of SAMPLE_ORDERS) {
+        const existing = await Order.findOne({ internalCode: item.internalCode });
+        if (!existing) {
+          const createdOrder = await Order.create({
+            ...item,
+            partnerId: partner._id,
+          });
 
-  // 3. Seed orders
-  for (const item of SAMPLE_ORDERS) {
-    const existing = await Order.findOne({ internalCode: item.internalCode });
-    if (!existing) {
-      const createdOrder = await Order.create({
-        ...item,
-        partnerId: partner._id,
-      });
-      console.log(`[seed] Đã tạo đơn hàng: ${item.internalCode}`);
+          if (item.internalCode === 'TUANPAD3024822076') {
+            const events = [
+              {
+                orderId: createdOrder._id,
+                source: 'scan_pda',
+                eventType: 'Giao cho Bưu tá đi nhận',
+                location: 'HNI, GLM, Bưu cục Gia Lâm',
+                note: 'Phân công bưu tá nhận hàng',
+                eventTime: new Date('2025-11-10T11:07:00'),
+                receivedAt: new Date('2025-11-10T11:07:00'),
+                contentHash: crypto.createHash('sha256').update(`auto-event1-${createdOrder._id}`).digest('hex'),
+              },
+              {
+                orderId: createdOrder._id,
+                source: 'scan_pda',
+                eventType: 'Đã điều phối',
+                location: 'HNI - Hà Nội',
+                note: '',
+                eventTime: new Date('2025-11-09T08:30:00'),
+                receivedAt: new Date('2025-11-09T08:30:00'),
+                contentHash: crypto.createHash('sha256').update(`auto-event2-${createdOrder._id}`).digest('hex'),
+              },
+              {
+                orderId: createdOrder._id,
+                source: 'system',
+                eventType: 'Tiếp nhận đơn',
+                location: 'Online',
+                note: '',
+                eventTime: new Date('2025-11-08T14:15:00'),
+                receivedAt: new Date('2025-11-08T14:15:00'),
+                contentHash: crypto.createHash('sha256').update(`auto-event3-${createdOrder._id}`).digest('hex'),
+              },
+            ];
 
-      // If TUANPAD3024822076, add timeline events
-      if (item.internalCode === 'TUANPAD3024822076') {
-        const events = [
-          {
-            orderId: createdOrder._id,
-            source: 'scan_pda',
-            eventType: 'Giao cho Bưu tá đi nhận',
-            location: 'HNI, GLM, Bưu cục Gia Lâm',
-            note: 'Phân công bưu tá nhận hàng',
-            eventTime: new Date('2025-11-10T11:07:00'),
-            receivedAt: new Date('2025-11-10T11:07:00'),
-            contentHash: crypto.createHash('sha256').update(`event1-${createdOrder._id}`).digest('hex'),
-          },
-          {
-            orderId: createdOrder._id,
-            source: 'scan_pda',
-            eventType: 'Đã điều phối',
-            location: 'HNI - Hà Nội',
-            note: '',
-            eventTime: new Date('2025-11-09T08:30:00'),
-            receivedAt: new Date('2025-11-09T08:30:00'),
-            contentHash: crypto.createHash('sha256').update(`event2-${createdOrder._id}`).digest('hex'),
-          },
-          {
-            orderId: createdOrder._id,
-            source: 'system',
-            eventType: 'Tiếp nhận đơn',
-            location: 'Online',
-            note: '',
-            eventTime: new Date('2025-11-08T14:15:00'),
-            receivedAt: new Date('2025-11-08T14:15:00'),
-            contentHash: crypto.createHash('sha256').update(`event3-${createdOrder._id}`).digest('hex'),
-          },
-        ];
-
-        for (const ev of events) {
-          try {
-            await OrderEvent.create(ev);
-          } catch (e) {
-            // Ignore hash collisions if re-running
+            for (const ev of events) {
+              try {
+                await OrderEvent.create(ev);
+              } catch (e) {
+                // Ignore
+              }
+            }
           }
         }
       }
+      console.log('[AutoSeed] Successfully populated initial database orders.');
     }
+  } catch (err) {
+    console.error('[AutoSeed] Warning seeding database:', err.message);
   }
-
-  await mongoose.disconnect();
-  console.log('[seed] Hoàn tất seeding dữ liệu.');
 }
 
-if (require.main === module) {
-  seed().catch((err) => {
-    console.error('[seed] Lỗi:', err);
-    process.exit(1);
-  });
-}
-
-module.exports = { seed };
+module.exports = { ensureInitialData };

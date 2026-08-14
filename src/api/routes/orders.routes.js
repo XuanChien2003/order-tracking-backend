@@ -118,6 +118,7 @@ router.get('/', authenticate, authorize('admin', 'partner'), asyncHandler(orderC
  *         name: internalCode
  *         required: true
  *         schema: { type: string }
+ *         description: Chấp nhận internalCode hoặc vtpCode (để app scan tra cứu bằng mã vừa quét mà không cần ghi log)
  *     responses:
  *       200:
  *         description: Chi tiết đơn hàng + danh sách orderEvents

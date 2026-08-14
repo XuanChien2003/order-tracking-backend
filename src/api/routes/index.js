@@ -5,6 +5,7 @@ const ordersRoutes = require('./orders.routes');
 const scansRoutes = require('./scans.routes');
 const webhookRoutes = require('./webhook.routes');
 const dashboardRoutes = require('./dashboard.routes');
+const usersRoutes = require('./users.routes');
 
 const router = express.Router();
 
@@ -14,5 +15,6 @@ router.use('/orders', ordersRoutes);
 router.use('/scans', scansRoutes);
 router.use('/webhook', webhookRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/users', usersRoutes);
 
 module.exports = router;

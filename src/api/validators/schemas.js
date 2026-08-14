@@ -12,4 +12,13 @@ const loginSchema = Joi.object({
   password: Joi.string().required(),
 });
 
-module.exports = { partnerRegisterSchema, loginSchema };
+// 'partner' is excluded here: partner accounts are created atomically with their Partner record
+// via POST /partners/register, so allowing it here would let one get created without a partnerId.
+const createUserSchema = Joi.object({
+  username: Joi.string().trim().min(1).required(),
+  password: Joi.string().min(8).required(),
+  displayName: Joi.string().trim().min(1).required(),
+  role: Joi.string().valid('admin', 'scanner').required(),
+});
+
+module.exports = { partnerRegisterSchema, loginSchema, createUserSchema };

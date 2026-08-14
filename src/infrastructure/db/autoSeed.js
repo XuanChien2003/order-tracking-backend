@@ -178,10 +178,9 @@ async function ensureInitialData() {
       partner = await Partner.create({
         publicId: 'PARTNER01',
         companyName: 'Viettel Post Partner',
-        email: 'partner@vtp.vn',
-        phone: '0988888888',
-        secretKeyHash: await hashPassword('PartnerSecret@123'),
-        isActive: true,
+        contactEmail: 'partner@vtp.vn',
+        contactPhone: '0988888888',
+        status: 'active',
       });
     }
 
@@ -200,7 +199,7 @@ async function ensureInitialData() {
             const events = [
               {
                 orderId: createdOrder._id,
-                source: 'scan_pda',
+                source: 'webhook_vtp',
                 eventType: 'Giao cho Bưu tá đi nhận',
                 location: 'HNI, GLM, Bưu cục Gia Lâm',
                 note: 'Phân công bưu tá nhận hàng',
@@ -210,7 +209,7 @@ async function ensureInitialData() {
               },
               {
                 orderId: createdOrder._id,
-                source: 'scan_pda',
+                source: 'webhook_vtp',
                 eventType: 'Đã điều phối',
                 location: 'HNI - Hà Nội',
                 note: '',
@@ -220,7 +219,7 @@ async function ensureInitialData() {
               },
               {
                 orderId: createdOrder._id,
-                source: 'system',
+                source: 'webhook_vtp',
                 eventType: 'Tiếp nhận đơn',
                 location: 'Online',
                 note: '',

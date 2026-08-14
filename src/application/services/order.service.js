@@ -95,8 +95,11 @@ function toEventPublic(event, actorMap) {
   };
 }
 
+// Accepts either internalCode or vtpCode as the lookup key: the PDA scanner only ever has the
+// vtpCode it just read, and forcing a scan event just to resolve one code to the other would give
+// it no way to look an order up read-only.
 async function getOrderDetail({ requester, internalCode }) {
-  const order = await Order.findOne({ internalCode }).lean();
+  const order = await Order.findOne({ $or: [{ internalCode }, { vtpCode: internalCode }] }).lean();
   if (!order) throw new AppError('Không tìm thấy đơn hàng', 404);
 
   if (requester.role === 'partner') {

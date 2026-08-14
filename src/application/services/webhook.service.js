@@ -10,6 +10,44 @@ function retryDelayMs(retryCount) {
   return Math.min(60000, 2 ** retryCount * 1000);
 }
 
+// VTP sends ORDER_STATUSDATE as "dd/MM/yyyy HH:mm:ss" - not parseable by `new Date()`, which assumes
+// MM/dd for slash-separated dates and would silently produce a wrong (or Invalid) date otherwise.
+const VTP_DATE_RE = /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/;
+function parseVtpDate(value) {
+  if (!value) return null;
+  const match = VTP_DATE_RE.exec(String(value).trim());
+  if (!match) return null;
+  const [, dd, mm, yyyy, hh, min, ss] = match;
+  const date = new Date(`${yyyy}-${mm}-${dd}T${hh}:${min}:${ss}`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+// Tolerates two shapes so ingestion keeps working regardless of which one VTP actually sends:
+// - the already-normalized internal shape: { vtpCode, status, eventTime, location, note, providerEventId }
+// - VTP's raw webhook envelope: { DATA: { ORDER_NUMBER, ORDER_STATUS, STATUS_NAME, ORDER_STATUSDATE, ... }, TOKEN }
+function normalizeVtpPayload(rawBody) {
+  const body = rawBody || {};
+  if (body.DATA && typeof body.DATA === 'object') {
+    const d = body.DATA;
+    return {
+      vtpCode: d.ORDER_NUMBER || d.ORDER_REFERENCE || null,
+      status: d.STATUS_NAME || (d.ORDER_STATUS != null ? String(d.ORDER_STATUS) : null),
+      eventTime: parseVtpDate(d.ORDER_STATUSDATE),
+      location: d.LOCATION_CURRENTLY || d.LOCALION_CURRENTLY || null,
+      note: d.NOTE || null,
+      providerEventId: null,
+    };
+  }
+  return {
+    vtpCode: body.vtpCode || null,
+    status: body.status || null,
+    eventTime: body.eventTime ? new Date(body.eventTime) : null,
+    location: body.location || null,
+    note: body.note || null,
+    providerEventId: body.providerEventId || null,
+  };
+}
+
 // FR-07 fast path: authenticate + persist raw payload to webhookInbox, return immediately.
 // Duplicate deliveries (same contentHash) are accepted idempotently, not rejected, since VTP may retry.
 async function ingestWebhook({ rawBody }) {
@@ -69,8 +107,8 @@ async function markFailed(item, message) {
 // Background job step: turn one webhookInbox item into orderEvents(source=webhook_vtp).
 // Never throws - failures are recorded on the item itself so one bad delivery can't block the queue.
 async function processWebhookItem(item) {
-  const payload = item.rawBody || {};
-  const vtpCode = payload.vtpCode;
+  const normalized = normalizeVtpPayload(item.rawBody);
+  const { vtpCode } = normalized;
   if (!vtpCode) {
     await markFailed(item, 'Payload thiếu vtpCode');
     return;
@@ -82,7 +120,7 @@ async function processWebhookItem(item) {
     return;
   }
 
-  let eventTime = payload.eventTime ? new Date(payload.eventTime) : item.receivedAt;
+  let eventTime = normalized.eventTime || item.receivedAt;
   if (Number.isNaN(eventTime.getTime()) || eventTime.getTime() > Date.now()) {
     eventTime = item.receivedAt;
   }
@@ -93,14 +131,14 @@ async function processWebhookItem(item) {
     await OrderEvent.create({
       orderId: order._id,
       source: 'webhook_vtp',
-      eventType: payload.status || 'unknown',
-      location: payload.location || null,
-      note: payload.note || null,
+      eventType: normalized.status || 'unknown',
+      location: normalized.location,
+      note: normalized.note,
       actorUserId: null,
-      rawPayload: payload,
+      rawPayload: item.rawBody,
       contentHash: item.contentHash,
-      providerEventId: payload.providerEventId || null,
-      externalStatus: payload.status || null,
+      providerEventId: normalized.providerEventId,
+      externalStatus: normalized.status,
       eventTime,
       receivedAt: item.receivedAt,
     });

@@ -12,7 +12,9 @@ function retryDelayMs(retryCount) {
 
 // VTP sends ORDER_STATUSDATE as "dd/MM/yyyy HH:mm:ss" - not parseable by `new Date()`, which assumes
 // MM/dd for slash-separated dates and would silently produce a wrong (or Invalid) date otherwise.
-const VTP_DATE_RE = /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/;
+// Real payloads have also been seen with stray spaces around the time colons (e.g. "09: 36: 53"),
+// so the seconds/minutes separators are matched loosely rather than as a literal ":".
+const VTP_DATE_RE = /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2})\s*:\s*(\d{2})\s*:\s*(\d{2})$/;
 function parseVtpDate(value) {
   if (!value) return null;
   const match = VTP_DATE_RE.exec(String(value).trim());

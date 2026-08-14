@@ -1,3 +1,4 @@
+const path = require('path');
 const bwipjs = require('bwip-js');
 const PDFDocument = require('pdfkit');
 const { Order, Partner } = require('../../domain/models');
@@ -5,6 +6,18 @@ const AppError = require('../errors/AppError');
 
 const LABEL_SIZE = [288, 432]; // ~4x6 inch, points
 const MAX_BATCH_SIZE = 100;
+
+// PDFKit's built-in fonts (Helvetica etc.) only cover WinAnsi - Vietnamese diacritics render as
+// missing glyphs/boxes. Inter has full Vietnamese coverage, so every label embeds it explicitly.
+// Registered once per document (registerFont parses the 876KB font file - doing that per page
+// would be wasteful on a 100-label batch); drawLabel just switches to it by name per page.
+const VN_FONT_PATH = path.join(__dirname, '../../assets/fonts/Inter-Variable.ttf');
+const VN_FONT_NAME = 'Inter-VN';
+
+function registerVietnameseFont(doc) {
+  doc.registerFont(VN_FONT_NAME, VN_FONT_PATH);
+  doc.font(VN_FONT_NAME);
+}
 
 async function generateBarcodePng(text, format) {
   const isQr = format === 'qr';
@@ -22,6 +35,7 @@ async function generateBarcodePng(text, format) {
 }
 
 function drawLabel(doc, order, barcodePng) {
+  doc.font(VN_FONT_NAME);
   doc.fontSize(14).text('PHIẾU GIAO HÀNG', { align: 'center' });
   doc.moveDown(0.5);
   doc.fontSize(10);
@@ -59,6 +73,7 @@ async function streamSingleLabelPdf({ requester, internalCode, format, res }) {
 
   const doc = new PDFDocument({ size: LABEL_SIZE, margin: 20 });
   doc.pipe(res);
+  registerVietnameseFont(doc);
   drawLabel(doc, order, barcodePng);
   doc.end();
 }
@@ -90,6 +105,7 @@ async function streamBatchLabelPdf({ requester, internalCodes, format, res }) {
 
   const doc = new PDFDocument({ size: LABEL_SIZE, margin: 20, autoFirstPage: false });
   doc.pipe(res);
+  registerVietnameseFont(doc);
   for (const order of orders) {
     // eslint-disable-next-line no-await-in-loop
     const barcodePng = await generateBarcodePng(order.vtpCode, format);

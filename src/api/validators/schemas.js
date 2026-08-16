@@ -7,6 +7,14 @@ const partnerRegisterSchema = Joi.object({
   password: Joi.string().min(8).required(),
 });
 
+// Partial update (PATCH) - admin-only, so at least one field must be provided.
+const partnerUpdateSchema = Joi.object({
+  companyName: Joi.string().trim().min(1),
+  contactEmail: Joi.string().trim().email(),
+  contactPhone: Joi.string().trim().min(1),
+  status: Joi.string().valid('active', 'disabled'),
+}).min(1);
+
 const loginSchema = Joi.object({
   username: Joi.string().trim().required(),
   password: Joi.string().required(),
@@ -21,4 +29,4 @@ const createUserSchema = Joi.object({
   role: Joi.string().valid('admin', 'scanner').required(),
 });
 
-module.exports = { partnerRegisterSchema, loginSchema, createUserSchema };
+module.exports = { partnerRegisterSchema, partnerUpdateSchema, loginSchema, createUserSchema };

@@ -1,5 +1,6 @@
 const { verifyAccessToken } = require('../../application/services/token.service');
 const AppError = require('../../application/errors/AppError');
+const { User, Partner } = require('../../domain/models');
 
 function authenticate(req, res, next) {
   const header = req.headers.authorization || '';
@@ -31,4 +32,28 @@ function authorize(...roles) {
   };
 }
 
-module.exports = { authenticate, authorize };
+// JWT only proves the account was active at issue time - a user disabled or a partner suspended
+// afterward would otherwise keep full access until the token naturally expires (up to 24h). This
+// adds one fresh DB read on top of the JWT check, for routes where that staleness window matters
+// (mutating data or reading it in bulk) - not applied globally to keep the common read paths cheap.
+async function requireActiveAccount(req, res, next) {
+  try {
+    const user = await User.findOne({ publicId: req.user.publicId }).select('isActive').lean();
+    if (!user || !user.isActive) {
+      next(new AppError('Tài khoản đã bị vô hiệu hóa', 403));
+      return;
+    }
+    if (req.user.role === 'partner') {
+      const partner = await Partner.findOne({ publicId: req.user.partnerId }).select('status').lean();
+      if (!partner || partner.status !== 'active') {
+        next(new AppError('Đối tác đã bị vô hiệu hóa', 403));
+        return;
+      }
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { authenticate, authorize, requireActiveAccount };

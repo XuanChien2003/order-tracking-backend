@@ -1,7 +1,8 @@
 const express = require('express');
 const multer = require('multer');
 const asyncHandler = require('../middlewares/asyncHandler');
-const { authenticate, authorize } = require('../middlewares/auth.middleware');
+const { authenticate, authorize, requireActiveAccount } = require('../middlewares/auth.middleware');
+const { importLimiter, searchLimiter, printLimiter } = require('../middlewares/rateLimit.middleware');
 const orderController = require('../controllers/order.controller');
 const AppError = require('../../application/errors/AppError');
 
@@ -60,6 +61,8 @@ router.post(
   '/import',
   authenticate,
   authorize('partner', 'admin'),
+  requireActiveAccount,
+  importLimiter,
   upload.single('file'),
   asyncHandler(orderController.importOrders)
 );
@@ -103,7 +106,7 @@ router.post(
  *       403:
  *         description: Không đủ quyền
  */
-router.get('/', authenticate, authorize('admin', 'partner'), asyncHandler(orderController.list));
+router.get('/', authenticate, authorize('admin', 'partner'), searchLimiter, asyncHandler(orderController.list));
 
 /**
  * @openapi
@@ -127,7 +130,13 @@ router.get('/', authenticate, authorize('admin', 'partner'), asyncHandler(orderC
  *       404:
  *         description: Không tìm thấy đơn hàng (hoặc không thuộc quyền xem của partner)
  */
-router.get('/:internalCode', authenticate, authorize('admin', 'partner', 'scanner'), asyncHandler(orderController.detail));
+router.get(
+  '/:internalCode',
+  authenticate,
+  authorize('admin', 'partner', 'scanner'),
+  requireActiveAccount,
+  asyncHandler(orderController.detail)
+);
 
 /**
  * @openapi
@@ -157,7 +166,14 @@ router.get('/:internalCode', authenticate, authorize('admin', 'partner', 'scanne
  *       404:
  *         description: Không tìm thấy đơn hàng
  */
-router.get('/:internalCode/label', authenticate, authorize('admin', 'partner'), asyncHandler(orderController.label));
+router.get(
+  '/:internalCode/label',
+  authenticate,
+  authorize('admin', 'partner'),
+  requireActiveAccount,
+  printLimiter,
+  asyncHandler(orderController.label)
+);
 
 /**
  * @openapi
@@ -193,6 +209,13 @@ router.get('/:internalCode/label', authenticate, authorize('admin', 'partner'), 
  *       404:
  *         description: Có mã không tồn tại hoặc không thuộc quyền in
  */
-router.post('/print-batch', authenticate, authorize('admin', 'partner'), asyncHandler(orderController.printBatch));
+router.post(
+  '/print-batch',
+  authenticate,
+  authorize('admin', 'partner'),
+  requireActiveAccount,
+  printLimiter,
+  asyncHandler(orderController.printBatch)
+);
 
 module.exports = router;

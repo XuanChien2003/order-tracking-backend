@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { Partner, User } = require('../../domain/models');
 const { hashPassword, comparePassword } = require('./password.service');
 const { signAccessToken } = require('./token.service');
@@ -5,6 +6,8 @@ const { generatePublicId } = require('../utils/publicId.util');
 const AppError = require('../errors/AppError');
 
 // FR-01: register a partner -> creates partners(status=active) + users(role=partner), no approval needed.
+// Both creates run in one transaction - without it, a crash between them would leave an orphaned
+// Partner with no login (or vice versa), and duplicate-check races could sneak past too.
 async function registerPartner({ companyName, contactEmail, contactPhone, password }) {
   const existingPartner = await Partner.findOne({ contactEmail });
   if (existingPartner) {
@@ -16,26 +19,41 @@ async function registerPartner({ companyName, contactEmail, contactPhone, passwo
     throw new AppError('username already exists', 409);
   }
 
-  const partner = await Partner.create({
-    publicId: generatePublicId(),
-    companyName,
-    contactEmail,
-    contactPhone,
-    status: 'active',
-  });
-
   const passwordHash = await hashPassword(password);
-  const user = await User.create({
-    publicId: generatePublicId(),
-    username: contactEmail,
-    passwordHash,
-    role: 'partner',
-    partnerId: partner._id,
-    displayName: companyName,
-    isActive: true,
-  });
 
-  return { partner, user };
+  const session = await mongoose.startSession();
+  try {
+    let partner;
+    let user;
+    await session.withTransaction(async () => {
+      [partner] = await Partner.create(
+        [{ publicId: generatePublicId(), companyName, contactEmail, contactPhone, status: 'active' }],
+        { session }
+      );
+      [user] = await User.create(
+        [
+          {
+            publicId: generatePublicId(),
+            username: contactEmail,
+            passwordHash,
+            role: 'partner',
+            partnerId: partner._id,
+            displayName: companyName,
+            isActive: true,
+          },
+        ],
+        { session }
+      );
+    });
+    return { partner, user };
+  } catch (err) {
+    if (err.code === 11000) {
+      throw new AppError('contactEmail hoặc username đã tồn tại', 409);
+    }
+    throw err;
+  } finally {
+    await session.endSession();
+  }
 }
 
 // FR-02: login for all 3 roles, returns a JWT that only carries publicId/role/partnerId.

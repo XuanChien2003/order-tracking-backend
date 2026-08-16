@@ -2,6 +2,7 @@ const express = require('express');
 const asyncHandler = require('../middlewares/asyncHandler');
 const { validateBody } = require('../middlewares/validate');
 const { authenticate, authorize } = require('../middlewares/auth.middleware');
+const { registerLimiter } = require('../middlewares/rateLimit.middleware');
 const { partnerRegisterSchema, partnerUpdateSchema } = require('../validators/schemas');
 const partnerController = require('../controllers/partner.controller');
 
@@ -33,7 +34,7 @@ const router = express.Router();
  *       409:
  *         description: contactEmail/username đã tồn tại
  */
-router.post('/register', validateBody(partnerRegisterSchema), asyncHandler(partnerController.register));
+router.post('/register', registerLimiter, validateBody(partnerRegisterSchema), asyncHandler(partnerController.register));
 
 /**
  * @openapi

@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { ORDER_STATUS_DEFAULT } = require('../constants/enums');
+const { ORDER_STATUS_DEFAULT, ORDER_STATUS_NORMALIZED } = require('../constants/enums');
 
 const orderSchema = new mongoose.Schema(
   {
@@ -21,6 +21,9 @@ const orderSchema = new mongoose.Schema(
     actorPhone: { type: String, default: null },
     currentStatus: { type: String, required: true, default: ORDER_STATUS_DEFAULT },
     currentStatusDate: { type: Date, required: true },
+    // Additive alongside currentStatus (free-text display) - a stable code for dashboards/filters
+    // to key off instead of matching Vietnamese text. See statusMapping.util.js.
+    normalizedStatus: { type: String, enum: ORDER_STATUS_NORMALIZED, default: 'IMPORTED' },
     version: { type: Number, default: 0 },
   },
   { timestamps: true }

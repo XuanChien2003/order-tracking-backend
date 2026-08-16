@@ -1,6 +1,7 @@
 const express = require('express');
 const asyncHandler = require('../middlewares/asyncHandler');
-const { authenticate, authorize } = require('../middlewares/auth.middleware');
+const { authenticate, authorize, requireActiveAccount } = require('../middlewares/auth.middleware');
+const { scanLimiter } = require('../middlewares/rateLimit.middleware');
 const scanController = require('../controllers/scan.controller');
 
 const router = express.Router();
@@ -37,7 +38,7 @@ const router = express.Router();
  *       404:
  *         description: Không tìm thấy đơn hàng với vtpCode này
  */
-router.post('/', authenticate, authorize('scanner'), asyncHandler(scanController.createScan));
+router.post('/', authenticate, authorize('scanner'), requireActiveAccount, scanLimiter, asyncHandler(scanController.createScan));
 
 /**
  * @openapi

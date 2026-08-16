@@ -1,6 +1,7 @@
 const express = require('express');
 const asyncHandler = require('../middlewares/asyncHandler');
 const { validateBody } = require('../middlewares/validate');
+const { loginLimiter } = require('../middlewares/rateLimit.middleware');
 const { loginSchema } = require('../validators/schemas');
 const authController = require('../controllers/auth.controller');
 
@@ -30,6 +31,6 @@ const router = express.Router();
  *       401:
  *         description: Sai tài khoản hoặc mật khẩu
  */
-router.post('/login', validateBody(loginSchema), asyncHandler(authController.login));
+router.post('/login', loginLimiter, validateBody(loginSchema), asyncHandler(authController.login));
 
 module.exports = router;

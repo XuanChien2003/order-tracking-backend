@@ -1,6 +1,6 @@
 const express = require('express');
 const asyncHandler = require('../middlewares/asyncHandler');
-const { authenticate, authorize } = require('../middlewares/auth.middleware');
+const { authenticate, authorize, requireActiveAccount } = require('../middlewares/auth.middleware');
 const dashboardController = require('../controllers/dashboard.controller');
 
 const router = express.Router();
@@ -21,6 +21,6 @@ const router = express.Router();
  *       403:
  *         description: Không đủ quyền
  */
-router.get('/stats', authenticate, authorize('admin', 'partner'), asyncHandler(dashboardController.stats));
+router.get('/stats', authenticate, authorize('admin', 'partner'), requireActiveAccount, asyncHandler(dashboardController.stats));
 
 module.exports = router;

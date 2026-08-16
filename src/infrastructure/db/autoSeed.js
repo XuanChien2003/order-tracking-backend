@@ -3,20 +3,29 @@ const { User, Partner, Order, OrderEvent } = require('../../domain/models');
 const { hashPassword } = require('../../application/services/password.service');
 const { generatePublicId } = require('../../application/utils/publicId.util');
 
-const SEED_ACCOUNTS = [
-  {
-    username: process.env.SEED_ADMIN_USERNAME || 'admin',
-    role: 'admin',
-    displayName: 'Quản trị hệ thống',
-    password: process.env.SEED_ADMIN_PASSWORD || 'Admin@12345',
-  },
-  {
-    username: process.env.SEED_SCANNER_USERNAME || 'scanner1',
-    role: 'scanner',
-    displayName: 'Nhân viên quét kho',
-    password: process.env.SEED_SCANNER_PASSWORD || 'Scanner@12345',
-  },
-];
+// No hardcoded fallback passwords - a default like 'Admin@12345' baked into source would end up
+// valid on every environment that forgets to override it, including by accident in production.
+function seedAccounts() {
+  const required = ['SEED_ADMIN_PASSWORD', 'SEED_SCANNER_PASSWORD'];
+  const missing = required.filter((key) => !process.env[key]);
+  if (missing.length > 0) {
+    throw new Error(`ENABLE_AUTO_SEED=true but missing env vars: ${missing.join(', ')}`);
+  }
+  return [
+    {
+      username: process.env.SEED_ADMIN_USERNAME || 'admin',
+      role: 'admin',
+      displayName: 'Quản trị hệ thống',
+      password: process.env.SEED_ADMIN_PASSWORD,
+    },
+    {
+      username: process.env.SEED_SCANNER_USERNAME || 'scanner1',
+      role: 'scanner',
+      displayName: 'Nhân viên quét kho',
+      password: process.env.SEED_SCANNER_PASSWORD,
+    },
+  ];
+}
 
 const SAMPLE_ORDERS = [
   {
@@ -154,10 +163,12 @@ const SAMPLE_ORDERS = [
   },
 ];
 
+// Only ever called from server.js when ENABLE_AUTO_SEED=true and NODE_ENV!=='production' -
+// dev/CI convenience only, never a silent production side effect.
 async function ensureInitialData() {
   try {
     // 1. Seed accounts
-    for (const account of SEED_ACCOUNTS) {
+    for (const account of seedAccounts()) {
       const existing = await User.findOne({ username: account.username });
       if (!existing) {
         const passwordHash = await hashPassword(account.password);
@@ -242,7 +253,10 @@ async function ensureInitialData() {
       console.log('[AutoSeed] Successfully populated initial database orders.');
     }
   } catch (err) {
-    console.error('[AutoSeed] Warning seeding database:', err.message);
+    // Fail loud in dev - a half-seeded DB (accounts but no partner/orders, or vice versa) is
+    // more confusing to debug later than a startup crash pointing at the exact cause now.
+    console.error('[AutoSeed] Seeding failed:', err.message);
+    throw err;
   }
 }
 

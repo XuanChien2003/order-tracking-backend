@@ -6,24 +6,48 @@ const swaggerUi = require('swagger-ui-express');
 
 const notFound = require('./api/middlewares/notFound');
 const errorHandler = require('./api/middlewares/errorHandler');
+const { generalLimiter } = require('./api/middlewares/rateLimit.middleware');
 const apiRoutes = require('./api/routes');
 const swaggerSpec = require('./infrastructure/swagger/swaggerSpec');
 const config = require('./infrastructure/config/env');
 
 const app = express();
 
-// CSP disabled: swagger-ui-express serves inline scripts/styles that a strict default CSP would block.
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors());
-app.use(express.json());
+// Swagger UI's inline scripts/styles need CSP relaxed just for its own routes - registering this
+// *before* the strict global helmet below means it fully handles+ends the /api/docs request
+// (never falling through to the strict one), while every other route still gets full CSP.
+// Also gated to non-production so the API surface isn't self-documented to the public internet.
+if (config.nodeEnv !== 'production') {
+  app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
+  app.use('/api/docs', helmet({ contentSecurityPolicy: false }), swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+}
+
+app.use(helmet());
+
+// Browser clients (the admin web) are restricted to an explicit allowlist; non-browser callers
+// (the mobile app, curl, VTP's own webhook caller) send no Origin header at all and are let
+// through regardless, since Origin-based CORS has nothing to enforce for them.
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || config.corsAllowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('Not allowed by CORS'));
+    },
+  })
+);
+
+// No endpoint here legitimately needs a large JSON body (Excel import goes through multer/
+// multipart, not this parser) - a tight explicit limit caps memory use from oversized requests.
+app.use(express.json({ limit: '512kb' }));
 app.use(morgan(config.nodeEnv === 'production' ? 'combined' : 'dev'));
+app.use('/api', generalLimiter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', env: config.nodeEnv });
 });
-
-app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api', apiRoutes);
 

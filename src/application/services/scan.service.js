@@ -39,6 +39,17 @@ async function recordScan({ vtpCode, eventType, location, note, eventTime, reque
     return { idempotent: true, event: existing, internalCode: order.internalCode };
   }
 
+  // Same requestId reused by this actor before but with different content (contentHash differs
+  // since it's derived from vtpCode+eventType+eventTime+etc) - that's a genuine conflict, not a
+  // network retry of the same request. Checked up front so the common case gets a clean 409
+  // instead of surfacing as an unstructured duplicate-key error.
+  if (requestId) {
+    const conflicting = await OrderEvent.findOne({ source: 'scan_pda', actorUserId: actorUserObjectId, requestId }).lean();
+    if (conflicting) {
+      throw new AppError('requestId đã được dùng với dữ liệu khác trước đó (idempotency conflict)', 409);
+    }
+  }
+
   let event;
   try {
     event = await OrderEvent.create({
@@ -55,10 +66,15 @@ async function recordScan({ vtpCode, eventType, location, note, eventTime, reque
     });
   } catch (err) {
     if (err.code === 11000) {
-      // race: another request with the same contentHash/requestId won the insert first
+      // race: another request with the same contentHash won the insert first
       const race = await OrderEvent.findOne({ contentHash }).lean();
       if (race) {
         return { idempotent: true, event: race, internalCode: order.internalCode };
+      }
+      // race: another concurrent request with the same actorUserId+requestId (different
+      // content) won the insert first, between our pre-check above and this insert.
+      if (requestId) {
+        throw new AppError('requestId đã được dùng với dữ liệu khác trước đó (idempotency conflict)', 409);
       }
     }
     throw err;

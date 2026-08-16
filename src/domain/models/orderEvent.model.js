@@ -47,8 +47,11 @@ const forbidMutation = function forbidMutation() {
 );
 
 orderEventSchema.index({ orderId: 1, eventTime: -1 });
+// Scoped to actorUserId (not just source) - a requestId is only meaningful as "this device's
+// retry of its own request"; two different scanners coincidentally generating the same requestId
+// should never collide with each other.
 orderEventSchema.index(
-  { source: 1, requestId: 1 },
+  { actorUserId: 1, requestId: 1 },
   { unique: true, partialFilterExpression: { source: 'scan_pda', requestId: { $type: 'string' } } }
 );
 orderEventSchema.index(

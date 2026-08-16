@@ -1,4 +1,5 @@
 const ExcelJS = require('exceljs');
+const mongoose = require('mongoose');
 const { Order, OrderEvent } = require('../../domain/models');
 const { generateInternalCode } = require('../utils/internalCode.util');
 const { sha256Hex } = require('../utils/hash.util');
@@ -40,21 +41,63 @@ function buildColumnMap(headerRow) {
   return map;
 }
 
-async function createOrderWithUniqueCode({ vtpCode, partnerObjectId, receiverName, receiverPhone, receiverAddress, productInfo, weightKg, now }) {
+// Creates the Order and its orderEvents(import) row in one transaction, so a crash or error
+// between the two can never leave an order with no import history (previously handled by a
+// manual "delete the order if the event insert fails" rollback, which isn't atomic against a
+// concurrent read of that order in the gap between the two writes).
+async function createOrderWithUniqueCode({
+  vtpCode,
+  partnerObjectId,
+  receiverName,
+  receiverPhone,
+  receiverAddress,
+  productInfo,
+  weightKg,
+  now,
+  actorUserObjectId,
+  record,
+}) {
   for (let attempt = 0; attempt < MAX_INTERNAL_CODE_ATTEMPTS; attempt += 1) {
     const internalCode = generateInternalCode(now);
+    const session = await mongoose.startSession();
     try {
-      const order = await Order.create({
-        internalCode,
-        vtpCode,
-        partnerId: partnerObjectId,
-        receiverName,
-        receiverPhone,
-        receiverAddress,
-        productInfo,
-        weightKg,
-        currentStatus: 'imported',
-        currentStatusDate: now,
+      let order;
+      // eslint-disable-next-line no-await-in-loop
+      await session.withTransaction(async () => {
+        [order] = await Order.create(
+          [
+            {
+              internalCode,
+              vtpCode,
+              partnerId: partnerObjectId,
+              receiverName,
+              receiverPhone,
+              receiverAddress,
+              productInfo,
+              weightKg,
+              currentStatus: 'imported',
+              currentStatusDate: now,
+            },
+          ],
+          { session }
+        );
+
+        const contentHash = sha256Hex(`import:${vtpCode}:${internalCode}`);
+        await OrderEvent.create(
+          [
+            {
+              orderId: order._id,
+              source: 'import',
+              eventType: 'import',
+              actorUserId: actorUserObjectId,
+              rawPayload: record,
+              contentHash,
+              eventTime: now,
+              receivedAt: now,
+            },
+          ],
+          { session }
+        );
       });
       return { order, error: null };
     } catch (err) {
@@ -65,6 +108,9 @@ async function createOrderWithUniqueCode({ vtpCode, partnerObjectId, receiverNam
         return { order: null, error: 'vtpCode đã tồn tại trong hệ thống' };
       }
       return { order: null, error: 'Lỗi khi tạo đơn hàng' };
+    } finally {
+      // eslint-disable-next-line no-await-in-loop
+      await session.endSession();
     }
   }
   return { order: null, error: 'Không thể sinh mã đơn hàng, vui lòng thử lại' };
@@ -161,30 +207,11 @@ async function importOrdersFromExcel({ fileBuffer, partnerObjectId, actorUserObj
       productInfo: record.productInfo || null,
       weightKg,
       now,
+      actorUserObjectId,
+      record,
     });
     if (!order) {
       results.push({ row: rowNumber, success: false, error });
-      continue;
-    }
-
-    const contentHash = sha256Hex(`import:${vtpCode}:${order.internalCode}`);
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      await OrderEvent.create({
-        orderId: order._id,
-        source: 'import',
-        eventType: 'import',
-        actorUserId: actorUserObjectId,
-        rawPayload: record,
-        contentHash,
-        eventTime: now,
-        receivedAt: now,
-      });
-    } catch (err) {
-      // Keep invariant #1 in PROJECT_CONTEXT.md 3.4: every order must have an import event.
-      // eslint-disable-next-line no-await-in-loop
-      await Order.deleteOne({ _id: order._id });
-      results.push({ row: rowNumber, success: false, error: 'Lỗi khi ghi lịch sử import, đã hủy dòng này' });
       continue;
     }
 

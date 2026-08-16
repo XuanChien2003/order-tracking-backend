@@ -3,6 +3,19 @@ const AppError = require('../errors/AppError');
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
+const MAX_SEARCH_LENGTH = 100;
+
+// Search terms go straight into $regex below - unescaped, a term like "(a+)+$" is a ReDoS
+// payload, and metacharacters like "." or "|" turn a literal search into an unintended pattern.
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function toSafeSearchRegex(value) {
+  const trimmed = String(value).trim().slice(0, MAX_SEARCH_LENGTH);
+  if (!trimmed) return null;
+  return { $regex: escapeRegex(trimmed), $options: 'i' };
+}
 
 function toOrderPublic(order, partnerMap) {
   const partnerInfo = partnerMap ? partnerMap.get(String(order.partnerId)) : null;
@@ -25,6 +38,7 @@ function toOrderPublic(order, partnerMap) {
     actorPhone: order.actorPhone || null,
     currentStatus: order.currentStatus,
     currentStatusDate: order.currentStatusDate,
+    normalizedStatus: order.normalizedStatus || 'UNKNOWN',
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };
@@ -56,17 +70,28 @@ async function listOrders({ requester, query }) {
   }
 
   if (query.internalCode) {
-    const term = String(query.internalCode).trim();
-    filter.$or = [
-      { internalCode: { $regex: term, $options: 'i' } },
-      { vtpCode: { $regex: term, $options: 'i' } },
-      { receiverName: { $regex: term, $options: 'i' } },
-      { receiverPhone: { $regex: term, $options: 'i' } },
-    ];
+    const term = toSafeSearchRegex(query.internalCode);
+    if (term) {
+      filter.$or = [
+        { internalCode: term },
+        { vtpCode: term },
+        { receiverName: term },
+        { receiverPhone: term },
+      ];
+    }
   }
-  if (query.vtpCode) filter.vtpCode = { $regex: String(query.vtpCode).trim(), $options: 'i' };
-  if (query.receiverPhone) filter.receiverPhone = { $regex: String(query.receiverPhone).trim(), $options: 'i' };
-  if (query.currentStatus) filter.currentStatus = { $regex: String(query.currentStatus).trim(), $options: 'i' };
+  if (query.vtpCode) {
+    const term = toSafeSearchRegex(query.vtpCode);
+    if (term) filter.vtpCode = term;
+  }
+  if (query.receiverPhone) {
+    const term = toSafeSearchRegex(query.receiverPhone);
+    if (term) filter.receiverPhone = term;
+  }
+  if (query.currentStatus) {
+    const term = toSafeSearchRegex(query.currentStatus);
+    if (term) filter.currentStatus = term;
+  }
 
   const page = Math.max(1, Number(query.page) || 1);
   const limit = Math.min(MAX_LIMIT, Math.max(1, Number(query.limit) || DEFAULT_LIMIT));

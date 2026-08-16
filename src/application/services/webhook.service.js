@@ -1,6 +1,5 @@
 const { WebhookInbox, Order, OrderEvent } = require('../../domain/models');
 const { sha256Hex } = require('../utils/hash.util');
-const { canonicalStringify } = require('../utils/canonicalJson.util');
 const { refreshOrderCurrentStatus } = require('./orderStatus.service');
 
 const MAX_RETRY = 5;
@@ -20,7 +19,11 @@ function parseVtpDate(value) {
   const match = VTP_DATE_RE.exec(String(value).trim());
   if (!match) return null;
   const [, dd, mm, yyyy, hh, min, ss] = match;
-  const date = new Date(`${yyyy}-${mm}-${dd}T${hh}:${min}:${ss}`);
+  // Explicit +07:00 (VTP operates in Vietnam) instead of leaving the offset implicit - without
+  // it, `new Date(...)` falls back to the server process's own OS timezone, which would parse
+  // this same string differently on this dev machine (UTC+7) than on a server running UTC
+  // (e.g. Render), silently shifting every webhook event's eventTime by up to 7 hours.
+  const date = new Date(`${yyyy}-${mm}-${dd}T${hh}:${min}:${ss}+07:00`);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -50,15 +53,31 @@ function normalizeVtpPayload(rawBody) {
   };
 }
 
+// Prefers VTP's own event identifier when present - two deliveries with the same providerEventId
+// are unambiguously the same event. Without one, whole-payload hashing is too strict (identical
+// retries collapse correctly, but two genuinely separate events that happen to render to the same
+// JSON would too) and too loose at once (insignificant field/order differences between two retries
+// of the *same* event would hash differently and be treated as new) - a composite business key
+// (vtpCode+status+eventTime+location) is a documented, stable middle ground.
+function computeDedupKey(normalized) {
+  if (normalized.providerEventId) {
+    return `provider:${normalized.providerEventId}`;
+  }
+  const eventTimeKey = normalized.eventTime ? normalized.eventTime.toISOString() : 'no-time';
+  return `composite:${normalized.vtpCode}:${normalized.status}:${eventTimeKey}:${normalized.location || ''}`;
+}
+
 // FR-07 fast path: authenticate + persist raw payload to webhookInbox, return immediately.
-// Duplicate deliveries (same contentHash) are accepted idempotently, not rejected, since VTP may retry.
-async function ingestWebhook({ rawBody }) {
-  const contentHash = sha256Hex(canonicalStringify(rawBody));
+// Duplicate deliveries (same dedup key) are accepted idempotently, not rejected, since VTP may retry.
+async function ingestWebhook({ rawBody, requestId }) {
+  const normalized = normalizeVtpPayload(rawBody);
+  const contentHash = sha256Hex(computeDedupKey(normalized));
   try {
     await WebhookInbox.create({ rawBody, contentHash, status: 'pending', receivedAt: new Date() });
     return { duplicate: false, contentHash };
   } catch (err) {
     if (err.code === 11000) {
+      console.log(`[webhook ${requestId || ''}] duplicate delivery, dedup key already seen`);
       return { duplicate: true, contentHash };
     }
     throw err;
@@ -156,4 +175,12 @@ async function processWebhookItem(item) {
   }
 }
 
-module.exports = { ingestWebhook, claimNextItem, processWebhookItem, markFailed, markProcessed, MAX_RETRY };
+module.exports = {
+  ingestWebhook,
+  claimNextItem,
+  processWebhookItem,
+  markFailed,
+  markProcessed,
+  normalizeVtpPayload,
+  MAX_RETRY,
+};

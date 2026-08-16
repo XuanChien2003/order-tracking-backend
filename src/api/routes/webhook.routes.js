@@ -1,5 +1,6 @@
 const express = require('express');
 const asyncHandler = require('../middlewares/asyncHandler');
+const { webhookLimiter } = require('../middlewares/rateLimit.middleware');
 const webhookController = require('../controllers/webhook.controller');
 
 const router = express.Router();
@@ -35,6 +36,6 @@ const router = express.Router();
  *       401:
  *         description: Token không hợp lệ
  */
-router.post('/vtp', asyncHandler(webhookController.receiveVtpWebhook));
+router.post('/vtp', webhookLimiter, asyncHandler(webhookController.receiveVtpWebhook));
 
 module.exports = router;

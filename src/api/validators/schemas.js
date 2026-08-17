@@ -28,6 +28,18 @@ const loginSchema = Joi.object({
   password: Joi.string().required(),
 });
 
+// Self-service password change - unlike admin-generated temp passwords (which use their own
+// crypto.randomBytes charset), a user-chosen password has to be enforced here since nothing else
+// stops them from picking something trivial.
+const PASSWORD_COMPLEXITY_RE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+const changePasswordSchema = Joi.object({
+  currentPassword: Joi.string().required(),
+  newPassword: Joi.string().min(8).pattern(PASSWORD_COMPLEXITY_RE).required().messages({
+    'string.pattern.base': 'Mật khẩu mới phải có ít nhất 8 ký tự, gồm chữ hoa, chữ thường và số',
+    'string.min': 'Mật khẩu mới phải có ít nhất 8 ký tự',
+  }),
+});
+
 // 'partner' is excluded here: partner accounts are created atomically with their Partner record
 // via POST /partners/register, so allowing it here would let one get created without a partnerId.
 const createUserSchema = Joi.object({
@@ -42,5 +54,6 @@ module.exports = {
   partnerAdminCreateSchema,
   partnerUpdateSchema,
   loginSchema,
+  changePasswordSchema,
   createUserSchema,
 };

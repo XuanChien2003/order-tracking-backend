@@ -5,4 +5,13 @@ async function login(req, res) {
   res.json(result);
 }
 
-module.exports = { login };
+async function changePassword(req, res) {
+  await authService.changePassword({
+    userPublicId: req.user.publicId,
+    currentPassword: req.body.currentPassword,
+    newPassword: req.body.newPassword,
+  });
+  res.json({ success: true });
+}
+
+module.exports = { login, changePassword };

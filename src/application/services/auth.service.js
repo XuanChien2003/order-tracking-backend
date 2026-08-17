@@ -95,4 +95,17 @@ async function login({ username, password }) {
   };
 }
 
-module.exports = { registerPartner, login };
+// Self-service change: any authenticated role (admin/partner/scanner) can change their own
+// password, gated only by knowing the current one - no admin/reset-credentials involvement.
+async function changePassword({ userPublicId, currentPassword, newPassword }) {
+  const user = await User.findOne({ publicId: userPublicId });
+  if (!user) throw new AppError('Không tìm thấy tài khoản', 404);
+
+  const isMatch = await comparePassword(currentPassword, user.passwordHash);
+  if (!isMatch) throw new AppError('Mật khẩu hiện tại không đúng', 401);
+
+  user.passwordHash = await hashPassword(newPassword);
+  await user.save();
+}
+
+module.exports = { registerPartner, login, changePassword };

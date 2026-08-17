@@ -5,7 +5,7 @@ const options = {
   definition: {
     openapi: '3.0.3',
     info: {
-      title: 'NXC Cross-border Order API',
+      title: 'New Horizon Logistics - Cross-border Order API',
       version: '1.0.0',
       description: 'API quản lý đơn hàng xuyên biên giới (kho Bằng Tường - Viettel Post)',
     },

@@ -46,8 +46,22 @@ function drawLabel(doc, order, barcodePng) {
   if (order.receiverAddress) doc.text(`Địa chỉ: ${order.receiverAddress}`);
   if (order.productInfo) doc.text(`Hàng hóa: ${order.productInfo}`);
   if (order.weightKg !== null && order.weightKg !== undefined) doc.text(`Khối lượng: ${order.weightKg} kg`);
-  doc.moveDown(1);
-  doc.image(barcodePng, { fit: [240, 100], align: 'center' });
+  // Reserve a fixed area near the bottom of every label for the barcode.
+  // It must not follow the text cursor because long order details can push
+  // the image beyond the visible/printable page area.
+  const barcodeX = 20;
+  const barcodeY = 292;
+  const barcodeWidth = 248;
+  const barcodeHeight = 104;
+  doc.save();
+  doc.lineWidth(0.5).strokeColor('#C9CED8').rect(barcodeX, barcodeY - 18, barcodeWidth, barcodeHeight + 24).stroke();
+  doc.fillColor('#334155').fontSize(8).text('SCAN BARCODE', barcodeX, barcodeY - 14, { width: barcodeWidth, align: 'center' });
+  doc.image(barcodePng, barcodeX, barcodeY, {
+    fit: [barcodeWidth, barcodeHeight],
+    align: 'center',
+    valign: 'center',
+  });
+  doc.restore();
 }
 
 // Same ownership rule as FR-08 order detail: partner only prints its own orders.

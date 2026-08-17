@@ -8,16 +8,16 @@ const { generatePublicId } = require('../src/application/utils/publicId.util');
 
 const SEED_ACCOUNTS = [
   {
-    username: process.env.SEED_ADMIN_USERNAME || 'admin',
+    username: process.env.SEED_ADMIN_USERNAME || 'nguyenxuanchienbk23@gmail.com',
     role: 'admin',
     displayName: 'Quản trị hệ thống',
-    password: process.env.SEED_ADMIN_PASSWORD || 'Admin@12345',
+    password: process.env.SEED_ADMIN_PASSWORD || 'Chien2003@',
   },
   {
-    username: process.env.SEED_SCANNER_USERNAME || 'scanner1',
+    username: process.env.SEED_SCANNER_USERNAME || 'nguyenxuanchienbkn@gmail.com',
     role: 'scanner',
     displayName: 'Nhân viên quét kho',
-    password: process.env.SEED_SCANNER_PASSWORD || 'Scanner@12345',
+    password: process.env.SEED_SCANNER_PASSWORD || 'Chien2003@',
   },
 ];
 

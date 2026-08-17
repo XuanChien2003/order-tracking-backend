@@ -9,6 +9,7 @@
     "seed": "node scripts/seed.js"
   },
   "dependencies": {
+    "@sendgrid/mail": "^8.1.6",
     "bcryptjs": "^2.4.3",
     "bwip-js": "^4.3.2",
     "cors": "^2.8.5",
@@ -23,7 +24,6 @@
     "morgan": "^1.10.0",
     "multer": "^2.0.1",
     "pdfkit": "^0.15.0",
-    "resend": "^6.20.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^14.0.1"

@@ -29,8 +29,9 @@ module.exports = {
     .filter(Boolean),
   // Raw SMTP is not usable here - Render (and most PaaS free/low tiers) blocks outbound
   // connections on the SMTP ports (25/465/587) to prevent spam abuse, so nodemailer talking
-  // directly to smtp.gmail.com just times out no matter how it's configured. Resend sends over
-  // HTTPS instead, which isn't blocked.
-  resendApiKey: process.env.RESEND_API_KEY || '',
-  emailFrom: process.env.EMAIL_FROM || 'onboarding@resend.dev',
+  // directly to smtp.gmail.com just times out no matter how it's configured. SendGrid sends over
+  // HTTPS instead, which isn't blocked. EMAIL_FROM must be an address verified via SendGrid's
+  // "Single Sender Verification" (no domain ownership required, unlike most other providers).
+  sendgridApiKey: process.env.SENDGRID_API_KEY || '',
+  emailFrom: process.env.EMAIL_FROM || '',
 };

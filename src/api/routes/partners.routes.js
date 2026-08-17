@@ -3,7 +3,7 @@ const asyncHandler = require('../middlewares/asyncHandler');
 const { validateBody } = require('../middlewares/validate');
 const { authenticate, authorize } = require('../middlewares/auth.middleware');
 const { registerLimiter } = require('../middlewares/rateLimit.middleware');
-const { partnerRegisterSchema, partnerUpdateSchema } = require('../validators/schemas');
+const { partnerRegisterSchema, partnerAdminCreateSchema, partnerUpdateSchema } = require('../validators/schemas');
 const partnerController = require('../controllers/partner.controller');
 
 const router = express.Router();
@@ -40,7 +40,7 @@ router.post('/register', registerLimiter, validateBody(partnerRegisterSchema), a
  * @openapi
  * /partners:
  *   post:
- *     summary: Admin tạo đối tác + tài khoản partner thay cho tự đăng ký
+ *     summary: Admin tạo đối tác + tài khoản partner thay cho tự đăng ký - mật khẩu được sinh tự động và gửi qua email liên hệ
  *     tags: [Partners]
  *     security:
  *       - bearerAuth: []
@@ -50,21 +50,20 @@ router.post('/register', registerLimiter, validateBody(partnerRegisterSchema), a
  *         application/json:
  *           schema:
  *             type: object
- *             required: [companyName, contactEmail, contactPhone, password]
+ *             required: [companyName, contactEmail, contactPhone]
  *             properties:
  *               companyName: { type: string }
  *               contactEmail: { type: string, format: email }
  *               contactPhone: { type: string }
- *               password: { type: string, minLength: 8 }
  *     responses:
  *       201:
- *         description: Tạo đối tác + tài khoản partner thành công
+ *         description: Tạo đối tác + tài khoản partner thành công (emailSent cho biết email gửi thông tin đăng nhập có thành công không)
  *       403:
  *         description: Không đủ quyền (chỉ admin)
  *       409:
  *         description: contactEmail/username đã tồn tại
  */
-router.post('/', authenticate, authorize('admin'), validateBody(partnerRegisterSchema), asyncHandler(partnerController.adminCreate));
+router.post('/', authenticate, authorize('admin'), validateBody(partnerAdminCreateSchema), asyncHandler(partnerController.adminCreate));
 
 /**
  * @openapi

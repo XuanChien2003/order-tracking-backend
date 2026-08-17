@@ -7,6 +7,14 @@ const partnerRegisterSchema = Joi.object({
   password: Joi.string().min(8).required(),
 });
 
+// Admin-initiated creation never takes a password from the request - one is generated server-side
+// and emailed to contactEmail instead (see partner.controller.js#adminCreate).
+const partnerAdminCreateSchema = Joi.object({
+  companyName: Joi.string().trim().min(1).required(),
+  contactEmail: Joi.string().trim().email().required(),
+  contactPhone: Joi.string().trim().min(1).required(),
+});
+
 // Partial update (PATCH) - admin-only, so at least one field must be provided.
 const partnerUpdateSchema = Joi.object({
   companyName: Joi.string().trim().min(1),
@@ -29,4 +37,10 @@ const createUserSchema = Joi.object({
   role: Joi.string().valid('admin', 'scanner').required(),
 });
 
-module.exports = { partnerRegisterSchema, partnerUpdateSchema, loginSchema, createUserSchema };
+module.exports = {
+  partnerRegisterSchema,
+  partnerAdminCreateSchema,
+  partnerUpdateSchema,
+  loginSchema,
+  createUserSchema,
+};

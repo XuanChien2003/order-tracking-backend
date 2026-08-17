@@ -13,6 +13,10 @@ function getTransporter() {
       port: config.smtp.port,
       secure: config.smtp.secure,
       auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.pass } : undefined,
+      // Render's containers resolve smtp.gmail.com to an IPv6 address sometimes (DNS round-robin)
+      // but have no outbound IPv6 route, which fails as ENETUNREACH - intermittently, depending on
+      // which record wins that lookup. Forcing IPv4 avoids the flaky path entirely.
+      family: 4,
     });
   }
   return transporter;

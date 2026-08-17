@@ -27,12 +27,10 @@ module.exports = {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
-  smtp: {
-    host: process.env.SMTP_HOST || '',
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true',
-    user: process.env.SMTP_USER || '',
-    pass: process.env.SMTP_PASS || '',
-    from: process.env.SMTP_FROM || process.env.SMTP_USER || '',
-  },
+  // Raw SMTP is not usable here - Render (and most PaaS free/low tiers) blocks outbound
+  // connections on the SMTP ports (25/465/587) to prevent spam abuse, so nodemailer talking
+  // directly to smtp.gmail.com just times out no matter how it's configured. Resend sends over
+  // HTTPS instead, which isn't blocked.
+  resendApiKey: process.env.RESEND_API_KEY || '',
+  emailFrom: process.env.EMAIL_FROM || 'onboarding@resend.dev',
 };

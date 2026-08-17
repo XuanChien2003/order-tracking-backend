@@ -16,7 +16,7 @@ const COLUMN_ALIASES = {
   productinfo: 'productInfo',
   weightkg: 'weightKg',
 };
-const REQUIRED_FIELDS = ['vtpCode', 'receiverName'];
+const REQUIRED_FIELDS = ['vtpCode', 'receiverName', 'receiverPhone', 'receiverAddress', 'productInfo', 'weightKg'];
 
 function cellToString(value) {
   if (value === null || value === undefined) return '';
@@ -164,24 +164,20 @@ async function importOrdersFromExcel({ fileBuffer, partnerObjectId, actorUserObj
 
     const vtpCode = record.vtpCode || '';
     const receiverName = record.receiverName || '';
+    const receiverPhone = record.receiverPhone || '';
+    const receiverAddress = record.receiverAddress || '';
+    const productInfo = record.productInfo || '';
 
-    if (!vtpCode) {
-      results.push({ row: rowNumber, success: false, error: 'vtpCode không được để trống' });
+    const missingField = REQUIRED_FIELDS.find((field) => !record[field]);
+    if (missingField) {
+      results.push({ row: rowNumber, success: false, error: `${missingField} không được để trống` });
       continue;
     }
-    if (!receiverName) {
-      results.push({ row: rowNumber, success: false, error: 'receiverName không được để trống' });
-      continue;
-    }
 
-    let weightKg = null;
-    if (record.weightKg) {
-      const parsedWeight = Number(record.weightKg);
-      if (Number.isNaN(parsedWeight) || parsedWeight < 0) {
-        results.push({ row: rowNumber, success: false, error: 'weightKg phải là số >= 0' });
-        continue;
-      }
-      weightKg = parsedWeight;
+    const weightKg = Number(record.weightKg);
+    if (Number.isNaN(weightKg) || weightKg < 0) {
+      results.push({ row: rowNumber, success: false, error: 'weightKg phải là số >= 0' });
+      continue;
     }
 
     if (seenInFile.has(vtpCode)) {
@@ -202,9 +198,9 @@ async function importOrdersFromExcel({ fileBuffer, partnerObjectId, actorUserObj
       vtpCode,
       partnerObjectId,
       receiverName,
-      receiverPhone: record.receiverPhone || null,
-      receiverAddress: record.receiverAddress || null,
-      productInfo: record.productInfo || null,
+      receiverPhone,
+      receiverAddress,
+      productInfo,
       weightKg,
       now,
       actorUserObjectId,

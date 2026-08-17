@@ -175,6 +175,15 @@ router.get(
   asyncHandler(orderController.label)
 );
 
+router.get(
+  '/:internalCode/barcode',
+  authenticate,
+  authorize('admin', 'partner'),
+  requireActiveAccount,
+  printLimiter,
+  asyncHandler(orderController.barcode)
+);
+
 /**
  * @openapi
  * /orders/print-batch:

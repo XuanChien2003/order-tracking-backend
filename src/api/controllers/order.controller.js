@@ -64,9 +64,17 @@ async function label(req, res) {
   await labelService.streamSingleLabelPdf({ requester: req.user, internalCode: req.params.internalCode, format, res });
 }
 
+async function barcode(req, res) {
+  const format = req.query.format === 'qr' ? 'qr' : 'code128';
+  const barcodePng = await labelService.getSingleLabelBarcode({ requester: req.user, internalCode: req.params.internalCode, format });
+  res.setHeader('Content-Type', 'image/png');
+  res.setHeader('Cache-Control', 'private, max-age=60');
+  res.send(barcodePng);
+}
+
 async function printBatch(req, res) {
   const format = req.body.format === 'qr' ? 'qr' : 'code128';
   await labelService.streamBatchLabelPdf({ requester: req.user, internalCodes: req.body.internalCodes, format, res });
 }
 
-module.exports = { importOrders, list, detail, label, printBatch };
+module.exports = { importOrders, list, detail, label, barcode, printBatch };

@@ -92,6 +92,14 @@ async function streamSingleLabelPdf({ requester, internalCode, format, res }) {
   doc.end();
 }
 
+// The web app uses this image to show a clean on-screen label preview without
+// embedding Chrome's built-in PDF viewer. Access follows the same ownership
+// rule as PDF printing.
+async function getSingleLabelBarcode({ requester, internalCode, format }) {
+  const order = await findOrderForRequester({ requester, internalCode });
+  return generateBarcodePng(order.vtpCode, format);
+}
+
 async function streamBatchLabelPdf({ requester, internalCodes, format, res }) {
   if (!Array.isArray(internalCodes) || internalCodes.length === 0) {
     throw new AppError('internalCodes phải là mảng và không được rỗng', 400);
@@ -129,4 +137,4 @@ async function streamBatchLabelPdf({ requester, internalCodes, format, res }) {
   doc.end();
 }
 
-module.exports = { streamSingleLabelPdf, streamBatchLabelPdf };
+module.exports = { streamSingleLabelPdf, streamBatchLabelPdf, getSingleLabelBarcode };

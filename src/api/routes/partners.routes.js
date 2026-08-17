@@ -120,4 +120,32 @@ router.get('/', authenticate, asyncHandler(partnerController.list));
  */
 router.patch('/:publicId', authenticate, authorize('admin'), validateBody(partnerUpdateSchema), asyncHandler(partnerController.update));
 
+/**
+ * @openapi
+ * /partners/{publicId}/reset-credentials:
+ *   post:
+ *     summary: Sinh mật khẩu mới cho tài khoản đối tác và gửi lại qua email liên hệ (dùng khi email lúc tạo tài khoản bị lỗi)
+ *     tags: [Partners]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: publicId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Đã sinh mật khẩu mới (emailSent cho biết email gửi có thành công không)
+ *       403:
+ *         description: Không đủ quyền (chỉ admin)
+ *       404:
+ *         description: Không tìm thấy đối tác hoặc tài khoản đăng nhập của đối tác
+ */
+router.post(
+  '/:publicId/reset-credentials',
+  authenticate,
+  authorize('admin'),
+  asyncHandler(partnerController.resetCredentials)
+);
+
 module.exports = router;

@@ -72,4 +72,11 @@ async function update(req, res) {
   res.json(toPartnerPublic(partner));
 }
 
-module.exports = { register, adminCreate, list, update };
+// Recovery action for when adminCreate's email step failed - issues a fresh password and
+// re-attempts the email, rather than requiring a whole new (and now-duplicate) partner record.
+async function resetCredentials(req, res) {
+  const result = await partnerService.resetCredentials({ publicId: req.params.publicId });
+  res.json(result);
+}
+
+module.exports = { register, adminCreate, list, update, resetCredentials };

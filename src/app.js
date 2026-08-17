@@ -13,6 +13,13 @@ const config = require('./infrastructure/config/env');
 
 const app = express();
 
+// Render (and most PaaS) puts the app behind exactly one reverse-proxy hop. Without this, Express
+// ignores X-Forwarded-For and req.ip resolves to that proxy's own address for every request -
+// identical for every real client - so express-rate-limit (which keys by req.ip) ends up rate
+// limiting the whole service's combined traffic instead of each caller individually. That's what
+// caused unrelated users to occasionally get "Quá nhiều lần đăng nhập" from other people's attempts.
+app.set('trust proxy', 1);
+
 // Swagger UI's inline scripts/styles need CSP relaxed just for its own routes - registering this
 // *before* the strict global helmet below means it fully handles+ends the /api/docs request
 // (never falling through to the strict one), while every other route still gets full CSP.

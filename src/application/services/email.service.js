@@ -22,7 +22,7 @@ async function sendPartnerCredentialsEmail({ to, companyName, username, password
   const html = `
     <div style="margin:0;padding:32px 16px;background:#f4f7fb;font-family:Arial,sans-serif;color:#1f2937">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden">
-        <tr><td style="padding:28px 32px 20px;text-align:center;background:#0d47a1">
+        <tr><td style="padding:28px 32px 20px;text-align:center;background:#ffffff;border-bottom:1px solid #eef1f6">
           <img src="${LOGO_URL}" alt="New Horizon Logistics" width="132" style="display:block;margin:0 auto;max-width:132px;height:auto" />
         </td></tr>
         <tr><td style="padding:32px">

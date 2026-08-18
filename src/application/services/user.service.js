@@ -8,7 +8,7 @@ const AppError = require('../errors/AppError');
 async function createUser({ username, password, displayName, role }) {
   const existing = await User.findOne({ username }).select('_id').lean();
   if (existing) {
-    throw new AppError('username already exists', 409);
+    throw new AppError('Tên đăng nhập đã tồn tại', 409);
   }
 
   const passwordHash = await hashPassword(password);

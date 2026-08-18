@@ -30,14 +30,12 @@ const loginSchema = Joi.object({
 
 // Self-service password change - unlike admin-generated temp passwords (which use their own
 // crypto.randomBytes charset), a user-chosen password has to be enforced here since nothing else
-// stops them from picking something trivial.
+// stops them from picking something trivial. Error text for this (including the pattern
+// violation) is generated centrally in middlewares/validate.js, not here.
 const PASSWORD_COMPLEXITY_RE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 const changePasswordSchema = Joi.object({
   currentPassword: Joi.string().required(),
-  newPassword: Joi.string().min(8).pattern(PASSWORD_COMPLEXITY_RE).required().messages({
-    'string.pattern.base': 'Mật khẩu mới phải có ít nhất 8 ký tự, gồm chữ hoa, chữ thường và số',
-    'string.min': 'Mật khẩu mới phải có ít nhất 8 ký tự',
-  }),
+  newPassword: Joi.string().min(8).pattern(PASSWORD_COMPLEXITY_RE).required(),
 });
 
 // 'partner' is excluded here: partner accounts are created atomically with their Partner record

@@ -41,7 +41,7 @@ app.use(
         callback(null, true);
         return;
       }
-      callback(new Error('Not allowed by CORS'));
+      callback(new Error('Nguồn gọi không được phép (CORS)'));
     },
   })
 );

@@ -6,7 +6,7 @@ function authenticate(req, res, next) {
   const header = req.headers.authorization || '';
   const [scheme, token] = header.split(' ');
   if (scheme !== 'Bearer' || !token) {
-    next(new AppError('Missing or invalid Authorization header', 401));
+    next(new AppError('Thiếu hoặc sai thông tin xác thực', 401));
     return;
   }
   try {
@@ -18,14 +18,14 @@ function authenticate(req, res, next) {
     };
     next();
   } catch (err) {
-    next(new AppError('Invalid or expired token', 401));
+    next(new AppError('Phiên đăng nhập không hợp lệ hoặc đã hết hạn', 401));
   }
 }
 
 function authorize(...roles) {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
-      next(new AppError('Forbidden', 403));
+      next(new AppError('Không đủ quyền truy cập', 403));
       return;
     }
     next();

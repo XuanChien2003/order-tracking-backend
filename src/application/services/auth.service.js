@@ -11,12 +11,12 @@ const AppError = require('../errors/AppError');
 async function registerPartner({ companyName, contactEmail, contactPhone, password }) {
   const existingPartner = await Partner.findOne({ contactEmail });
   if (existingPartner) {
-    throw new AppError('contactEmail already registered', 409);
+    throw new AppError('Email liên hệ đã được đăng ký', 409);
   }
   // username convention: contactEmail (see PROJECT_CONTEXT.md section 7)
   const existingUser = await User.findOne({ username: contactEmail });
   if (existingUser) {
-    throw new AppError('username already exists', 409);
+    throw new AppError('Tên đăng nhập đã tồn tại', 409);
   }
 
   const passwordHash = await hashPassword(password);
@@ -60,19 +60,19 @@ async function registerPartner({ companyName, contactEmail, contactPhone, passwo
 async function login({ username, password }) {
   const user = await User.findOne({ username });
   if (!user || !user.isActive) {
-    throw new AppError('Invalid username or password', 401);
+    throw new AppError('Sai tên đăng nhập hoặc mật khẩu', 401);
   }
 
   const isMatch = await comparePassword(password, user.passwordHash);
   if (!isMatch) {
-    throw new AppError('Invalid username or password', 401);
+    throw new AppError('Sai tên đăng nhập hoặc mật khẩu', 401);
   }
 
   let partnerPublicId = null;
   if (user.role === 'partner') {
     const partner = await Partner.findById(user.partnerId);
     if (!partner || partner.status !== 'active') {
-      throw new AppError('Partner account is disabled', 403);
+      throw new AppError('Tài khoản đối tác đã bị vô hiệu hóa', 403);
     }
     partnerPublicId = partner.publicId;
   }
@@ -101,8 +101,12 @@ async function changePassword({ userPublicId, currentPassword, newPassword }) {
   const user = await User.findOne({ publicId: userPublicId });
   if (!user) throw new AppError('Không tìm thấy tài khoản', 404);
 
+  // 400, not 401 - the caller's session/token is perfectly valid here (authenticate already
+  // passed), this is just a wrong form value. A 401 would trip the FE's blanket
+  // nxc:unauthorized/logout handler on any 401 response and force-log the user out just for
+  // mistyping their current password.
   const isMatch = await comparePassword(currentPassword, user.passwordHash);
-  if (!isMatch) throw new AppError('Mật khẩu hiện tại không đúng', 401);
+  if (!isMatch) throw new AppError('Mật khẩu hiện tại không đúng', 400);
 
   user.passwordHash = await hashPassword(newPassword);
   await user.save();

@@ -3,9 +3,6 @@ const { sendMail } = require('../../infrastructure/email/mailer');
 const WEB_APP_URL = (process.env.WEB_APP_URL || 'https://fe-wine-seven.vercel.app').replace(/\/$/, '');
 const LOGIN_URL = `${WEB_APP_URL}/login`;
 const PROFILE_URL = `${WEB_APP_URL}/profile`;
-// Gmail proxies and caches remote images by exact URL, including any query string - a version
-// param here forces a fresh fetch instead of reusing a stale cached result from before the logo
-// was actually live on Vercel (bump this if the logo file itself ever changes again).
 
 function escapeHtml(value) {
   return String(value)

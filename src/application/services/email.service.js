@@ -6,7 +6,6 @@ const PROFILE_URL = `${WEB_APP_URL}/profile`;
 // Gmail proxies and caches remote images by exact URL, including any query string - a version
 // param here forces a fresh fetch instead of reusing a stale cached result from before the logo
 // was actually live on Vercel (bump this if the logo file itself ever changes again).
-const LOGO_URL = `${WEB_APP_URL}/Logo.png?v=2`;
 
 function escapeHtml(value) {
   return String(value)
@@ -25,9 +24,6 @@ async function sendPartnerCredentialsEmail({ to, companyName, username, password
   const html = `
     <div style="margin:0;padding:32px 16px;background:#f4f7fb;font-family:Arial,sans-serif;color:#1f2937">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden">
-        <tr><td style="padding:28px 32px 20px;text-align:center;background:#ffffff;border-bottom:1px solid #eef1f6">
-          <img src="${LOGO_URL}" alt="New Horizon Logistics" width="132" style="display:block;margin:0 auto;max-width:132px;height:auto" />
-        </td></tr>
         <tr><td style="padding:32px">
           <h1 style="margin:0 0 16px;font-size:22px;color:#102a56">Tài khoản của bạn đã sẵn sàng</h1>
           <p style="margin:0 0 16px;line-height:1.6">Xin chào <strong>${safeCompanyName}</strong>,</p>

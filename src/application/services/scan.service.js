@@ -1,6 +1,6 @@
 const { Order, OrderEvent } = require('../../domain/models');
 const { sha256Hex } = require('../utils/hash.util');
-const { SCAN_EVENT_TYPES } = require('../../domain/constants/enums');
+const { SCAN_EVENT_TYPES, SCAN_MOVEMENT_EVENT_TYPES } = require('../../domain/constants/enums');
 const { refreshOrderCurrentStatus } = require('./orderStatus.service');
 const AppError = require('../errors/AppError');
 
@@ -80,7 +80,11 @@ async function recordScan({ vtpCode, eventType, location, note, eventTime, reque
     throw err;
   }
 
-  await refreshOrderCurrentStatus(order._id);
+  // tra_cuu is a read-only lookup logged for history purposes only - it must never overwrite
+  // the order's real shipment status with a non-movement event.
+  if (SCAN_MOVEMENT_EVENT_TYPES.includes(eventType)) {
+    await refreshOrderCurrentStatus(order._id);
+  }
 
   return { idempotent: false, event, internalCode: order.internalCode };
 }

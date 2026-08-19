@@ -1,6 +1,6 @@
 // One-off helper to populate the (real, shared) database with clearly-tagged test data for
-// exercising the new scan-history / geofence / dashboard-by-employee features end to end:
-// 2 test scanner accounts, 1 test partner, 5 test orders, and a spread of scan_pda events
+// exercising the scan-history / dashboard-by-employee features end to end: 2 test scanner
+// accounts, 1 test partner, 5 test orders, and a spread of scan_pda events
 // (nhap_kho/xuat_kho/ban_giao/tra_cuu) across both scanners over the last few days.
 //
 // Everything this script creates is prefixed "TEST" (usernames, order codes, partner name) so
@@ -15,7 +15,6 @@ const { connectDb } = require('../src/infrastructure/db/mongoose');
 const { User, Partner, Order } = require('../src/domain/models');
 const userService = require('../src/application/services/user.service');
 const scanService = require('../src/application/services/scan.service');
-const env = require('../src/infrastructure/config/env');
 
 const TEST_SCANNER_PASSWORD = 'Test@12345';
 
@@ -94,7 +93,7 @@ async function ensureOrders(partner) {
 
 async function seedScanEvents(orders, scanners) {
   const [scannerA, scannerB] = scanners;
-  // (order index, actor, eventType, days ago, needs GPS)
+  // (order index, actor, eventType, days ago)
   const plan = [
     [0, scannerA, 'nhap_kho', 4],
     [0, scannerA, 'xuat_kho', 3],
@@ -116,7 +115,6 @@ async function seedScanEvents(orders, scanners) {
   let createdCount = 0;
   for (const [orderIdx, actor, eventType, daysBack] of plan) {
     const order = orders[orderIdx];
-    const needsGps = eventType === 'nhap_kho' || eventType === 'xuat_kho';
     try {
       const result = await scanService.recordScan({
         vtpCode: order.vtpCode,
@@ -124,8 +122,6 @@ async function seedScanEvents(orders, scanners) {
         eventTime: daysAgo(daysBack, 8 + (orderIdx % 8)).toISOString(),
         requestId: `seed-test-${order.vtpCode}-${eventType}-${daysBack}-${actor.username}`,
         actorUserObjectId: actor._id,
-        lat: needsGps ? env.warehouseLat : undefined,
-        lng: needsGps ? env.warehouseLng : undefined,
       });
       if (!result.idempotent) createdCount += 1;
     } catch (err) {

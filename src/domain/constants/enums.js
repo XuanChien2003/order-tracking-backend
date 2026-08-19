@@ -3,9 +3,6 @@ const PARTNER_STATUS = ['active', 'disabled'];
 const ORDER_EVENT_SOURCE = ['scan_pda', 'webhook_vtp', 'import'];
 // Movement events: change the order's currentStatus when recorded (see orderStatus.service.js).
 const SCAN_MOVEMENT_EVENT_TYPES = ['nhap_kho', 'xuat_kho', 'ban_giao'];
-// Subset of movement events confined to the physical warehouse (see WAREHOUSE_* env vars) -
-// ban_giao is excluded since handover can legitimately happen off-site (gate, in transit).
-const SCAN_WAREHOUSE_LOCKED_EVENT_TYPES = ['nhap_kho', 'xuat_kho'];
 // tra_cuu: scanner looked up an order without a movement action. Still logged as a scan_pda
 // event (so it shows in the scanner's own history), but must never affect Order.currentStatus.
 const SCAN_LOOKUP_EVENT_TYPE = 'tra_cuu';
@@ -38,7 +35,6 @@ module.exports = {
   ORDER_EVENT_SOURCE,
   SCAN_EVENT_TYPES,
   SCAN_MOVEMENT_EVENT_TYPES,
-  SCAN_WAREHOUSE_LOCKED_EVENT_TYPES,
   SCAN_LOOKUP_EVENT_TYPE,
   WEBHOOK_STATUS,
   ORDER_STATUS_DEFAULT,

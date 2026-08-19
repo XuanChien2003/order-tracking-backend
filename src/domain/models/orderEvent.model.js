@@ -16,10 +16,6 @@ const orderEventSchema = new mongoose.Schema(
     externalStatus: { type: String, default: null },
     eventTime: { type: Date, required: true },
     receivedAt: { type: Date, required: true },
-    // GPS the App PDA reported at scan time (nhap_kho/xuat_kho only - see scan.service.js's
-    // geofence check). Null for every other source/eventType.
-    lat: { type: Number, default: null },
-    lng: { type: Number, default: null },
   },
   { timestamps: false }
 );

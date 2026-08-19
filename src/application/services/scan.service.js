@@ -1,13 +1,7 @@
 const { Order, OrderEvent } = require('../../domain/models');
 const { sha256Hex } = require('../utils/hash.util');
-const {
-  SCAN_EVENT_TYPES,
-  SCAN_MOVEMENT_EVENT_TYPES,
-  SCAN_WAREHOUSE_LOCKED_EVENT_TYPES,
-} = require('../../domain/constants/enums');
+const { SCAN_EVENT_TYPES, SCAN_MOVEMENT_EVENT_TYPES } = require('../../domain/constants/enums');
 const { refreshOrderCurrentStatus } = require('./orderStatus.service');
-const { distanceMeters } = require('../utils/geo.util');
-const env = require('../../infrastructure/config/env');
 const AppError = require('../errors/AppError');
 
 const DEFAULT_LIMIT = 20;
@@ -15,24 +9,12 @@ const MAX_LIMIT = 100;
 
 // FR-05: scanner scans a code (value read = vtpCode). Dedup via contentHash -> idempotent 200, no new record.
 // No cap on number of scans per order.
-async function recordScan({ vtpCode, eventType, location, note, eventTime, requestId, actorUserObjectId, lat, lng }) {
+async function recordScan({ vtpCode, eventType, location, note, eventTime, requestId, actorUserObjectId }) {
   if (!vtpCode) {
     throw new AppError('vtpCode là bắt buộc', 400);
   }
   if (!SCAN_EVENT_TYPES.includes(eventType)) {
     throw new AppError(`eventType phải thuộc: ${SCAN_EVENT_TYPES.join(', ')}`, 400);
-  }
-
-  // Geofence: nhap_kho/xuat_kho can only be recorded from inside the warehouse. ban_giao and
-  // tra_cuu are exempt (handover can happen off-site; lookups don't move anything).
-  if (SCAN_WAREHOUSE_LOCKED_EVENT_TYPES.includes(eventType)) {
-    if (typeof lat !== 'number' || typeof lng !== 'number' || Number.isNaN(lat) || Number.isNaN(lng)) {
-      throw new AppError('Cần bật định vị (GPS) trên điện thoại để ghi nhận nhập/xuất kho', 400);
-    }
-    const distance = distanceMeters(lat, lng, env.warehouseLat, env.warehouseLng);
-    if (distance > env.warehouseRadiusM) {
-      throw new AppError('Bạn đang ở ngoài phạm vi kho, không thể ghi nhận nhập/xuất kho', 403);
-    }
   }
 
   const order = await Order.findOne({ vtpCode }).select('_id').lean();
@@ -81,8 +63,6 @@ async function recordScan({ vtpCode, eventType, location, note, eventTime, reque
       requestId: requestId || null,
       eventTime: parsedEventTime,
       receivedAt: new Date(),
-      lat: typeof lat === 'number' && !Number.isNaN(lat) ? lat : null,
-      lng: typeof lng === 'number' && !Number.isNaN(lng) ? lng : null,
     });
   } catch (err) {
     if (err.code === 11000) {

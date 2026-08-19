@@ -39,7 +39,6 @@ function drawLabel(doc, order, barcodePng) {
   doc.fontSize(14).text('PHIẾU GIAO HÀNG', { align: 'center' });
   doc.moveDown(0.5);
   doc.fontSize(10);
-  doc.text(`Mã đơn: ${order.internalCode}`);
   doc.text(`Mã VTP: ${order.vtpCode}`);
   doc.text(`Người nhận: ${order.receiverName}`);
   if (order.receiverPhone) doc.text(`SĐT: ${order.receiverPhone}`);
@@ -65,8 +64,8 @@ function drawLabel(doc, order, barcodePng) {
 }
 
 // Same ownership rule as FR-08 order detail: partner only prints its own orders.
-async function findOrderForRequester({ requester, internalCode }) {
-  const order = await Order.findOne({ internalCode }).lean();
+async function findOrderForRequester({ requester, vtpCode }) {
+  const order = await Order.findOne({ vtpCode }).lean();
   if (!order) throw new AppError('Không tìm thấy đơn hàng', 404);
   if (requester.role === 'partner') {
     const partner = await Partner.findOne({ publicId: requester.partnerId }).select('_id').lean();
@@ -78,12 +77,12 @@ async function findOrderForRequester({ requester, internalCode }) {
 }
 
 // FR-04: barcode/QR from vtpCode + PDF label. Streams directly to res to avoid buffering the whole PDF in memory.
-async function streamSingleLabelPdf({ requester, internalCode, format, res }) {
-  const order = await findOrderForRequester({ requester, internalCode });
+async function streamSingleLabelPdf({ requester, vtpCode, format, res }) {
+  const order = await findOrderForRequester({ requester, vtpCode });
   const barcodePng = await generateBarcodePng(order.vtpCode, format);
 
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${order.internalCode}.pdf"`);
+  res.setHeader('Content-Disposition', `inline; filename="${order.vtpCode}.pdf"`);
 
   const doc = new PDFDocument({ size: LABEL_SIZE, margin: 20 });
   doc.pipe(res);
@@ -95,27 +94,27 @@ async function streamSingleLabelPdf({ requester, internalCode, format, res }) {
 // The web app uses this image to show a clean on-screen label preview without
 // embedding Chrome's built-in PDF viewer. Access follows the same ownership
 // rule as PDF printing.
-async function getSingleLabelBarcode({ requester, internalCode, format }) {
-  const order = await findOrderForRequester({ requester, internalCode });
+async function getSingleLabelBarcode({ requester, vtpCode, format }) {
+  const order = await findOrderForRequester({ requester, vtpCode });
   return generateBarcodePng(order.vtpCode, format);
 }
 
-async function streamBatchLabelPdf({ requester, internalCodes, format, res }) {
-  if (!Array.isArray(internalCodes) || internalCodes.length === 0) {
-    throw new AppError('internalCodes phải là mảng và không được rỗng', 400);
+async function streamBatchLabelPdf({ requester, vtpCodes, format, res }) {
+  if (!Array.isArray(vtpCodes) || vtpCodes.length === 0) {
+    throw new AppError('vtpCodes phải là mảng và không được rỗng', 400);
   }
-  if (internalCodes.length > MAX_BATCH_SIZE) {
+  if (vtpCodes.length > MAX_BATCH_SIZE) {
     throw new AppError(`Chỉ hỗ trợ tối đa ${MAX_BATCH_SIZE} nhãn/lần in`, 400);
   }
 
   const orders = [];
   const notFound = [];
-  for (const internalCode of internalCodes) {
+  for (const vtpCode of vtpCodes) {
     try {
       // eslint-disable-next-line no-await-in-loop
-      orders.push(await findOrderForRequester({ requester, internalCode }));
+      orders.push(await findOrderForRequester({ requester, vtpCode }));
     } catch (err) {
-      notFound.push(internalCode);
+      notFound.push(vtpCode);
     }
   }
   if (notFound.length > 0) {

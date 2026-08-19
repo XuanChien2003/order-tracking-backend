@@ -29,7 +29,6 @@ function seedAccounts() {
 
 const SAMPLE_ORDERS = [
   {
-    internalCode: 'TUANPAD3024822',
     vtpCode: 'VTP3024822',
     receiverName: 'Nguyễn Văn A',
     receiverPhone: '0901234567',
@@ -48,7 +47,6 @@ const SAMPLE_ORDERS = [
     currentStatusDate: new Date('2025-11-10T11:07:00'),
   },
   {
-    internalCode: 'TUANPAD3024823',
     vtpCode: 'VTP3024823',
     receiverName: 'Trần Thị B',
     receiverPhone: '0912345678',
@@ -67,7 +65,6 @@ const SAMPLE_ORDERS = [
     currentStatusDate: new Date('2025-11-09T15:30:00'),
   },
   {
-    internalCode: 'TUANPAD3024824',
     vtpCode: 'VTP3024824',
     receiverName: 'Lê Văn C',
     receiverPhone: '0923456789',
@@ -86,7 +83,6 @@ const SAMPLE_ORDERS = [
     currentStatusDate: new Date('2025-11-09T08:20:00'),
   },
   {
-    internalCode: 'TUANPAD3024825',
     vtpCode: 'VTP3024825',
     receiverName: 'Phạm Thị D',
     receiverPhone: '0934567890',
@@ -105,7 +101,6 @@ const SAMPLE_ORDERS = [
     currentStatusDate: new Date('2025-11-08T16:45:00'),
   },
   {
-    internalCode: 'TUANPAD3024826',
     vtpCode: 'VTP3024826',
     receiverName: 'Hoàng Văn E',
     receiverPhone: '0945678901',
@@ -124,7 +119,6 @@ const SAMPLE_ORDERS = [
     currentStatusDate: new Date('2025-11-08T10:10:00'),
   },
   {
-    internalCode: 'TUANPAD3024827',
     vtpCode: 'VTP3024827',
     receiverName: 'Đỗ Thị F',
     receiverPhone: '0956789012',
@@ -143,7 +137,6 @@ const SAMPLE_ORDERS = [
     currentStatusDate: new Date('2025-11-07T09:30:00'),
   },
   {
-    internalCode: 'TUANPAD3024822076',
     vtpCode: 'VTP3024822076',
     receiverName: 'Nguyễn Cường',
     receiverPhone: '0334128111',
@@ -199,14 +192,14 @@ async function ensureInitialData() {
     const orderCount = await Order.countDocuments();
     if (orderCount < 2) {
       for (const item of SAMPLE_ORDERS) {
-        const existing = await Order.findOne({ internalCode: item.internalCode });
+        const existing = await Order.findOne({ vtpCode: item.vtpCode });
         if (!existing) {
           const createdOrder = await Order.create({
             ...item,
             partnerId: partner._id,
           });
 
-          if (item.internalCode === 'TUANPAD3024822076') {
+          if (item.vtpCode === 'VTP3024822076') {
             const events = [
               {
                 orderId: createdOrder._id,

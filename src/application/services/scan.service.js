@@ -35,7 +35,7 @@ async function recordScan({ vtpCode, eventType, location, note, eventTime, reque
     }
   }
 
-  const order = await Order.findOne({ vtpCode }).select('_id internalCode').lean();
+  const order = await Order.findOne({ vtpCode }).select('_id').lean();
   if (!order) {
     throw new AppError('Không tìm thấy đơn hàng với vtpCode này', 404);
   }
@@ -54,7 +54,7 @@ async function recordScan({ vtpCode, eventType, location, note, eventTime, reque
 
   const existing = await OrderEvent.findOne({ contentHash }).lean();
   if (existing) {
-    return { idempotent: true, event: existing, internalCode: order.internalCode };
+    return { idempotent: true, event: existing, vtpCode };
   }
 
   // Same requestId reused by this actor before but with different content (contentHash differs
@@ -89,7 +89,7 @@ async function recordScan({ vtpCode, eventType, location, note, eventTime, reque
       // race: another request with the same contentHash won the insert first
       const race = await OrderEvent.findOne({ contentHash }).lean();
       if (race) {
-        return { idempotent: true, event: race, internalCode: order.internalCode };
+        return { idempotent: true, event: race, vtpCode };
       }
       // race: another concurrent request with the same actorUserId+requestId (different
       // content) won the insert first, between our pre-check above and this insert.
@@ -106,7 +106,7 @@ async function recordScan({ vtpCode, eventType, location, note, eventTime, reque
     await refreshOrderCurrentStatus(order._id);
   }
 
-  return { idempotent: false, event, internalCode: order.internalCode };
+  return { idempotent: false, event, vtpCode };
 }
 
 // FR-06: scanner's own scan history, paginated, newest first.
@@ -121,7 +121,7 @@ async function getScanHistory({ actorUserObjectId, page, limit }) {
   ]);
 
   const orderIds = [...new Set(events.map((e) => String(e.orderId)))];
-  const orders = await Order.find({ _id: { $in: orderIds } }).select('internalCode vtpCode receiverName').lean();
+  const orders = await Order.find({ _id: { $in: orderIds } }).select('vtpCode receiverName').lean();
   const orderMap = new Map(orders.map((o) => [String(o._id), o]));
 
   const items = events.map((e) => {
@@ -132,7 +132,7 @@ async function getScanHistory({ actorUserObjectId, page, limit }) {
       note: e.note,
       eventTime: e.eventTime,
       receivedAt: e.receivedAt,
-      order: order ? { internalCode: order.internalCode, vtpCode: order.vtpCode, receiverName: order.receiverName } : null,
+      order: order ? { vtpCode: order.vtpCode, receiverName: order.receiverName } : null,
     };
   });
 

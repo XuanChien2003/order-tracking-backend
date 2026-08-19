@@ -1,12 +1,10 @@
 const ExcelJS = require('exceljs');
 const mongoose = require('mongoose');
 const { Order, OrderEvent } = require('../../domain/models');
-const { generateInternalCode } = require('../utils/internalCode.util');
 const { sha256Hex } = require('../utils/hash.util');
 const AppError = require('../errors/AppError');
 
 const MAX_ROWS = 500;
-const MAX_INTERNAL_CODE_ATTEMPTS = 5;
 
 const COLUMN_ALIASES = {
   vtpcode: 'vtpCode',
@@ -44,8 +42,11 @@ function buildColumnMap(headerRow) {
 // Creates the Order and its orderEvents(import) row in one transaction, so a crash or error
 // between the two can never leave an order with no import history (previously handled by a
 // manual "delete the order if the event insert fails" rollback, which isn't atomic against a
-// concurrent read of that order in the gap between the two writes).
-async function createOrderWithUniqueCode({
+// concurrent read of that order in the gap between the two writes). vtpCode is the partner's own
+// VTP-generated code (the only code that exists - see PROJECT_CONTEXT.md), so its uniqueness is
+// already guaranteed by the pre-check in the caller plus the schema's unique index; no retry loop
+// needed here (that was only ever for random internalCode collisions, since removed).
+async function createOrderRecord({
   vtpCode,
   partnerObjectId,
   receiverName,
@@ -57,63 +58,53 @@ async function createOrderWithUniqueCode({
   actorUserObjectId,
   record,
 }) {
-  for (let attempt = 0; attempt < MAX_INTERNAL_CODE_ATTEMPTS; attempt += 1) {
-    const internalCode = generateInternalCode(now);
-    const session = await mongoose.startSession();
-    try {
-      let order;
-      // eslint-disable-next-line no-await-in-loop
-      await session.withTransaction(async () => {
-        [order] = await Order.create(
-          [
-            {
-              internalCode,
-              vtpCode,
-              partnerId: partnerObjectId,
-              receiverName,
-              receiverPhone,
-              receiverAddress,
-              productInfo,
-              weightKg,
-              currentStatus: 'imported',
-              currentStatusDate: now,
-            },
-          ],
-          { session }
-        );
+  const session = await mongoose.startSession();
+  try {
+    let order;
+    await session.withTransaction(async () => {
+      [order] = await Order.create(
+        [
+          {
+            vtpCode,
+            partnerId: partnerObjectId,
+            receiverName,
+            receiverPhone,
+            receiverAddress,
+            productInfo,
+            weightKg,
+            currentStatus: 'imported',
+            currentStatusDate: now,
+          },
+        ],
+        { session }
+      );
 
-        const contentHash = sha256Hex(`import:${vtpCode}:${internalCode}`);
-        await OrderEvent.create(
-          [
-            {
-              orderId: order._id,
-              source: 'import',
-              eventType: 'import',
-              actorUserId: actorUserObjectId,
-              rawPayload: record,
-              contentHash,
-              eventTime: now,
-              receivedAt: now,
-            },
-          ],
-          { session }
-        );
-      });
-      return { order, error: null };
-    } catch (err) {
-      if (err.code === 11000 && err.keyValue && err.keyValue.internalCode) {
-        continue; // collision on the random code, retry with a fresh one
-      }
-      if (err.code === 11000 && err.keyValue && err.keyValue.vtpCode) {
-        return { order: null, error: 'vtpCode đã tồn tại trong hệ thống' };
-      }
-      return { order: null, error: 'Lỗi khi tạo đơn hàng' };
-    } finally {
-      // eslint-disable-next-line no-await-in-loop
-      await session.endSession();
+      const contentHash = sha256Hex(`import:${vtpCode}`);
+      await OrderEvent.create(
+        [
+          {
+            orderId: order._id,
+            source: 'import',
+            eventType: 'import',
+            actorUserId: actorUserObjectId,
+            rawPayload: record,
+            contentHash,
+            eventTime: now,
+            receivedAt: now,
+          },
+        ],
+        { session }
+      );
+    });
+    return { order, error: null };
+  } catch (err) {
+    if (err.code === 11000 && err.keyValue && err.keyValue.vtpCode) {
+      return { order: null, error: 'vtpCode đã tồn tại trong hệ thống' };
     }
+    return { order: null, error: 'Lỗi khi tạo đơn hàng' };
+  } finally {
+    await session.endSession();
   }
-  return { order: null, error: 'Không thể sinh mã đơn hàng, vui lòng thử lại' };
 }
 
 // FR-03: import up to 500 rows/call, one order + one orderEvents(source=import) per valid row.
@@ -194,7 +185,7 @@ async function importOrdersFromExcel({ fileBuffer, partnerObjectId, actorUserObj
     }
 
     // eslint-disable-next-line no-await-in-loop
-    const { order, error } = await createOrderWithUniqueCode({
+    const { order, error } = await createOrderRecord({
       vtpCode,
       partnerObjectId,
       receiverName,
@@ -211,7 +202,7 @@ async function importOrdersFromExcel({ fileBuffer, partnerObjectId, actorUserObj
       continue;
     }
 
-    results.push({ row: rowNumber, success: true, internalCode: order.internalCode, vtpCode: order.vtpCode });
+    results.push({ row: rowNumber, success: true, vtpCode: order.vtpCode });
   }
 
   const successCount = results.filter((r) => r.success).length;

@@ -33,7 +33,6 @@ const TEST_PARTNER = {
 };
 
 const TEST_ORDERS = [1, 2, 3, 4, 5].map((n) => ({
-  internalCode: `TEST-000${n}`,
   vtpCode: `TESTVTP000${n}`,
   receiverName: `TEST Khách hàng ${n}`,
   receiverPhone: `090000000${n}`,
@@ -83,10 +82,10 @@ async function ensurePartner() {
 async function ensureOrders(partner) {
   const orders = [];
   for (const o of TEST_ORDERS) {
-    let order = await Order.findOne({ internalCode: o.internalCode });
+    let order = await Order.findOne({ vtpCode: o.vtpCode });
     if (!order) {
       order = await Order.create({ ...o, partnerId: partner._id, currentStatus: 'imported' });
-      console.log(`[seed-test] Đã tạo đơn test: ${o.internalCode}`);
+      console.log(`[seed-test] Đã tạo đơn test: ${o.vtpCode}`);
     }
     orders.push(order);
   }
@@ -123,14 +122,14 @@ async function seedScanEvents(orders, scanners) {
         vtpCode: order.vtpCode,
         eventType,
         eventTime: daysAgo(daysBack, 8 + (orderIdx % 8)).toISOString(),
-        requestId: `seed-test-${order.internalCode}-${eventType}-${daysBack}-${actor.username}`,
+        requestId: `seed-test-${order.vtpCode}-${eventType}-${daysBack}-${actor.username}`,
         actorUserObjectId: actor._id,
         lat: needsGps ? env.warehouseLat : undefined,
         lng: needsGps ? env.warehouseLng : undefined,
       });
       if (!result.idempotent) createdCount += 1;
     } catch (err) {
-      console.error(`[seed-test] Bỏ qua 1 sự kiện (${order.internalCode}/${eventType}): ${err.message}`);
+      console.error(`[seed-test] Bỏ qua 1 sự kiện (${order.vtpCode}/${eventType}): ${err.message}`);
     }
   }
   console.log(`[seed-test] Đã ghi ${createdCount} sự kiện quét mới.`);
@@ -148,7 +147,7 @@ async function main() {
   for (const s of TEST_SCANNERS) {
     console.log(`  - ${s.username} / ${TEST_SCANNER_PASSWORD}`);
   }
-  console.log(`  Mã đơn test: ${TEST_ORDERS.map((o) => o.internalCode).join(', ')}`);
+  console.log(`  Mã VTP test: ${TEST_ORDERS.map((o) => o.vtpCode).join(', ')}`);
 }
 
 if (require.main === module) {

@@ -3,7 +3,9 @@ const { ORDER_STATUS_DEFAULT, ORDER_STATUS_NORMALIZED } = require('../constants/
 
 const orderSchema = new mongoose.Schema(
   {
-    internalCode: { type: String, required: true, unique: true },
+    // vtpCode is the sole order identifier - the partner integrates directly with Viettel Post's
+    // API, so every order already carries a VTP-generated code before it ever reaches this system
+    // (via Excel import). There is no separate internal code (see PROJECT_CONTEXT.md).
     vtpCode: { type: String, required: true, unique: true },
     partnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Partner', required: true },
     receiverName: { type: String, required: true },

@@ -2,7 +2,6 @@ const FIELD_LABELS = {
   username: 'Tên đăng nhập',
   contactEmail: 'Email liên hệ',
   vtpCode: 'Mã VTP',
-  internalCode: 'Mã đơn',
   publicId: 'Mã định danh',
 };
 

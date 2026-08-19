@@ -28,7 +28,7 @@ async function createScan(req, res) {
 
   res.status(200).json({
     idempotent: result.idempotent,
-    internalCode: result.internalCode,
+    vtpCode: result.vtpCode,
     eventType: result.event.eventType,
     eventTime: result.event.eventTime,
   });

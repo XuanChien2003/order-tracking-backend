@@ -55,18 +55,18 @@ async function list(req, res) {
 }
 
 async function detail(req, res) {
-  const result = await orderService.getOrderDetail({ requester: req.user, internalCode: req.params.internalCode });
+  const result = await orderService.getOrderDetail({ requester: req.user, vtpCode: req.params.vtpCode });
   res.json(result);
 }
 
 async function label(req, res) {
   const format = req.query.format === 'qr' ? 'qr' : 'code128';
-  await labelService.streamSingleLabelPdf({ requester: req.user, internalCode: req.params.internalCode, format, res });
+  await labelService.streamSingleLabelPdf({ requester: req.user, vtpCode: req.params.vtpCode, format, res });
 }
 
 async function barcode(req, res) {
   const format = req.query.format === 'qr' ? 'qr' : 'code128';
-  const barcodePng = await labelService.getSingleLabelBarcode({ requester: req.user, internalCode: req.params.internalCode, format });
+  const barcodePng = await labelService.getSingleLabelBarcode({ requester: req.user, vtpCode: req.params.vtpCode, format });
   res.setHeader('Content-Type', 'image/png');
   res.setHeader('Cache-Control', 'private, max-age=60');
   res.send(barcodePng);
@@ -74,7 +74,7 @@ async function barcode(req, res) {
 
 async function printBatch(req, res) {
   const format = req.body.format === 'qr' ? 'qr' : 'code128';
-  await labelService.streamBatchLabelPdf({ requester: req.user, internalCodes: req.body.internalCodes, format, res });
+  await labelService.streamBatchLabelPdf({ requester: req.user, vtpCodes: req.body.vtpCodes, format, res });
 }
 
 module.exports = { importOrders, list, detail, label, barcode, printBatch };

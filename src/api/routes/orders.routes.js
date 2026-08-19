@@ -77,11 +77,13 @@ router.post(
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
- *         name: internalCode
+ *         name: keyword
  *         schema: { type: string }
+ *         description: Tìm theo vtpCode, tên hoặc SĐT người nhận
  *       - in: query
  *         name: vtpCode
  *         schema: { type: string }
+ *         description: Lọc chính xác theo vtpCode
  *       - in: query
  *         name: receiverPhone
  *         schema: { type: string }
@@ -110,7 +112,7 @@ router.get('/', authenticate, authorize('admin', 'partner'), searchLimiter, asyn
 
 /**
  * @openapi
- * /orders/{internalCode}:
+ * /orders/{vtpCode}:
  *   get:
  *     summary: Chi tiết đơn hàng kèm lịch sử sự kiện (FR-08)
  *     tags: [Orders]
@@ -118,10 +120,10 @@ router.get('/', authenticate, authorize('admin', 'partner'), searchLimiter, asyn
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: internalCode
+ *         name: vtpCode
  *         required: true
  *         schema: { type: string }
- *         description: Chấp nhận internalCode hoặc vtpCode (để app scan tra cứu bằng mã vừa quét mà không cần ghi log)
+ *         description: Mã VTP của đơn hàng (mã duy nhất - app scan tra cứu bằng chính mã vừa quét, không cần ghi log)
  *     responses:
  *       200:
  *         description: Chi tiết đơn hàng + danh sách orderEvents
@@ -131,7 +133,7 @@ router.get('/', authenticate, authorize('admin', 'partner'), searchLimiter, asyn
  *         description: Không tìm thấy đơn hàng (hoặc không thuộc quyền xem của partner)
  */
 router.get(
-  '/:internalCode',
+  '/:vtpCode',
   authenticate,
   authorize('admin', 'partner', 'scanner'),
   requireActiveAccount,
@@ -140,7 +142,7 @@ router.get(
 
 /**
  * @openapi
- * /orders/{internalCode}/label:
+ * /orders/{vtpCode}/label:
  *   get:
  *     summary: Xuất nhãn PDF (mã vạch Code128/QR từ vtpCode) cho 1 đơn hàng (FR-04)
  *     tags: [Orders]
@@ -148,7 +150,7 @@ router.get(
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: internalCode
+ *         name: vtpCode
  *         required: true
  *         schema: { type: string }
  *       - in: query
@@ -167,7 +169,7 @@ router.get(
  *         description: Không tìm thấy đơn hàng
  */
 router.get(
-  '/:internalCode/label',
+  '/:vtpCode/label',
   authenticate,
   authorize('admin', 'partner'),
   requireActiveAccount,
@@ -176,7 +178,7 @@ router.get(
 );
 
 router.get(
-  '/:internalCode/barcode',
+  '/:vtpCode/barcode',
   authenticate,
   authorize('admin', 'partner'),
   requireActiveAccount,
@@ -198,9 +200,9 @@ router.get(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [internalCodes]
+ *             required: [vtpCodes]
  *             properties:
- *               internalCodes:
+ *               vtpCodes:
  *                 type: array
  *                 items: { type: string }
  *                 maxItems: 100
@@ -214,7 +216,7 @@ router.get(
  *         content:
  *           application/pdf: {}
  *       400:
- *         description: internalCodes rỗng hoặc vượt quá 100 mã
+ *         description: vtpCodes rỗng hoặc vượt quá 100 mã
  *       404:
  *         description: Có mã không tồn tại hoặc không thuộc quyền in
  */

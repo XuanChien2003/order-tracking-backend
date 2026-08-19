@@ -20,7 +20,6 @@ function toSafeSearchRegex(value) {
 function toOrderPublic(order, partnerMap) {
   const partnerInfo = partnerMap ? partnerMap.get(String(order.partnerId)) : null;
   return {
-    internalCode: order.internalCode,
     vtpCode: order.vtpCode,
     partner: partnerInfo ? { publicId: partnerInfo.publicId, companyName: partnerInfo.companyName } : null,
     receiverName: order.receiverName,
@@ -69,11 +68,10 @@ async function listOrders({ requester, query }) {
     filter.partnerId = partner._id;
   }
 
-  if (query.internalCode) {
-    const term = toSafeSearchRegex(query.internalCode);
+  if (query.keyword) {
+    const term = toSafeSearchRegex(query.keyword);
     if (term) {
       filter.$or = [
-        { internalCode: term },
         { vtpCode: term },
         { receiverName: term },
         { receiverPhone: term },
@@ -120,11 +118,8 @@ function toEventPublic(event, actorMap) {
   };
 }
 
-// Accepts either internalCode or vtpCode as the lookup key: the PDA scanner only ever has the
-// vtpCode it just read, and forcing a scan event just to resolve one code to the other would give
-// it no way to look an order up read-only.
-async function getOrderDetail({ requester, internalCode }) {
-  const order = await Order.findOne({ $or: [{ internalCode }, { vtpCode: internalCode }] }).lean();
+async function getOrderDetail({ requester, vtpCode }) {
+  const order = await Order.findOne({ vtpCode }).lean();
   if (!order) throw new AppError('Không tìm thấy đơn hàng', 404);
 
   if (requester.role === 'partner') {

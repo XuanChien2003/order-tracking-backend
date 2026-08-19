@@ -15,7 +15,7 @@ const router = express.Router();
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Thống kê (partner chỉ thấy đơn của mình, admin toàn hệ thống)
+ *         description: Thống kê (partner chỉ thấy đơn của mình, admin toàn hệ thống). Riêng admin có thêm `scanStats` (tổng lượt quét theo loại sự kiện + theo từng nhân viên); partner nhận `scanStats: null`
  *       401:
  *         description: Chưa đăng nhập
  *       403:

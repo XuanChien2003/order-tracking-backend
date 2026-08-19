@@ -34,4 +34,9 @@ module.exports = {
   // "Single Sender Verification" (no domain ownership required, unlike most other providers).
   sendgridApiKey: process.env.SENDGRID_API_KEY || '',
   emailFrom: process.env.EMAIL_FROM || '',
+  // Geofence for nhap_kho/xuat_kho scans (see scan.service.js) - defaults to the Viettel Post
+  // Hanoi warehouse (16 Phố Lê Đại Hành, Hai Bà Trưng), overridable per-deployment via env vars.
+  warehouseLat: Number(process.env.WAREHOUSE_LAT) || 21.0097723,
+  warehouseLng: Number(process.env.WAREHOUSE_LNG) || 105.8503157,
+  warehouseRadiusM: Number(process.env.WAREHOUSE_RADIUS_M) || 150,
 };

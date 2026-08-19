@@ -30,11 +30,19 @@ const router = express.Router();
  *               requestId:
  *                 type: string
  *                 description: Khóa idempotency tùy chọn do client sinh (phòng khi thiết bị gửi lại do timeout mạng)
+ *               lat:
+ *                 type: number
+ *                 description: Vĩ độ GPS hiện tại của thiết bị - bắt buộc khi eventType là nhap_kho/xuat_kho (geofence quanh kho)
+ *               lng:
+ *                 type: number
+ *                 description: Kinh độ GPS hiện tại của thiết bị - bắt buộc khi eventType là nhap_kho/xuat_kho (geofence quanh kho)
  *     responses:
  *       200:
  *         description: Ghi nhận thành công (idempotent=true nếu là bản ghi trùng lặp)
  *       400:
- *         description: Thiếu/sai vtpCode hoặc eventType
+ *         description: Thiếu/sai vtpCode, eventType, hoặc thiếu lat/lng cho nhap_kho/xuat_kho
+ *       403:
+ *         description: Ngoài phạm vi kho (chỉ áp dụng cho nhap_kho/xuat_kho)
  *       404:
  *         description: Không tìm thấy đơn hàng với vtpCode này
  */

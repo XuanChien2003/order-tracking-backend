@@ -1,4 +1,4 @@
-const { Order, Partner } = require('../../domain/models');
+const { Order, Partner, OrderEvent, User } = require('../../domain/models');
 const AppError = require('../errors/AppError');
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -78,6 +78,10 @@ async function getDashboardStats({ requester }) {
     val: Math.round((d.val / maxVal) * 100),
   }));
 
+  // Scan activity (who scanned what, how many times) is internal warehouse-staff data - scanners
+  // aren't tied to a partner (PROJECT_CONTEXT.md 2.3), so this is admin-only, not shown to partner.
+  const scanStats = requester.role === 'admin' ? await getScanStats() : null;
+
   return {
     totalOrders,
     inTransitCount,
@@ -86,6 +90,60 @@ async function getDashboardStats({ requester }) {
     byStatus: byStatusAgg,
     recentOrders7d: chart7Days.reduce((sum, d) => sum + d.count, 0),
     chart7Days: chart7DaysNormalized,
+    scanStats,
+  };
+}
+
+// Scan lượt quét: tổng theo loại sự kiện (nhap_kho/xuat_kho/ban_giao/tra_cuu) và theo từng
+// nhân viên quét, để admin quản lý hoạt động kho.
+async function getScanStats() {
+  const [byTypeAgg, byEmployeeAgg] = await Promise.all([
+    OrderEvent.aggregate([
+      { $match: { source: 'scan_pda' } },
+      { $group: { _id: '$eventType', count: { $sum: 1 } } },
+      { $project: { _id: 0, eventType: '$_id', count: 1 } },
+    ]),
+    OrderEvent.aggregate([
+      { $match: { source: 'scan_pda', actorUserId: { $ne: null } } },
+      {
+        $group: {
+          _id: { actorUserId: '$actorUserId', eventType: '$eventType' },
+          count: { $sum: 1 },
+          lastScanAt: { $max: '$eventTime' },
+        },
+      },
+    ]),
+  ]);
+
+  const actorIds = [...new Set(byEmployeeAgg.map((row) => String(row._id.actorUserId)))];
+  const actors = actorIds.length
+    ? await User.find({ _id: { $in: actorIds } }).select('publicId username displayName').lean()
+    : [];
+  const actorMap = new Map(actors.map((a) => [String(a._id), a]));
+
+  // Reshape from one row per (actor, eventType) into one row per actor with per-type counts.
+  const employeeMap = new Map();
+  for (const row of byEmployeeAgg) {
+    const key = String(row._id.actorUserId);
+    if (!employeeMap.has(key)) {
+      const actor = actorMap.get(key);
+      employeeMap.set(key, {
+        actorPublicId: actor?.publicId || null,
+        displayName: actor?.displayName || actor?.username || 'Không xác định',
+        total: 0,
+        byEventType: {},
+        lastScanAt: null,
+      });
+    }
+    const entry = employeeMap.get(key);
+    entry.byEventType[row._id.eventType] = row.count;
+    entry.total += row.count;
+    if (!entry.lastScanAt || row.lastScanAt > entry.lastScanAt) entry.lastScanAt = row.lastScanAt;
+  }
+
+  return {
+    byEventType: byTypeAgg,
+    byEmployee: [...employeeMap.values()].sort((a, b) => b.total - a.total),
   };
 }
 

@@ -12,7 +12,7 @@ async function resolveActorUser(req) {
 
 async function createScan(req, res) {
   const actorUser = await resolveActorUser(req);
-  const { vtpCode, eventType, location, note, eventTime, requestId } = req.body;
+  const { vtpCode, eventType, location, note, eventTime, requestId, force } = req.body;
 
   const result = await scanService.recordScan({
     vtpCode,
@@ -22,6 +22,7 @@ async function createScan(req, res) {
     eventTime,
     requestId,
     actorUserObjectId: actorUser._id,
+    force: force === true,
   });
 
   res.status(200).json({

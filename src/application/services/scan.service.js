@@ -6,13 +6,17 @@ const AppError = require('../errors/AppError');
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
+const RESCAN_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 // FR-05: scanner scans a code (value read = vtpCode). One warehouse account (see
-// PROJECT_CONTEXT.md - one account per warehouse) only ever gets ONE saved record per
-// (order, eventType): a network failure + retry, or a duplicate manual/scan entry, must resolve
-// to that same record rather than creating a second one. A different account (a different
-// warehouse the order also passes through) still gets its own independent record.
-async function recordScan({ vtpCode, eventType, location, note, eventTime, requestId, actorUserObjectId }) {
+// PROJECT_CONTEXT.md - one account per warehouse) gets one saved record per (order, eventType) by
+// default: a network failure + retry, or an accidental duplicate scan/entry, resolves to that same
+// record rather than creating a second one. If the scanner genuinely scanned wrong and wants to
+// correct it, the app can resubmit with force=true ("Quét lại") to record a second, corrective
+// event instead - but only within RESCAN_WINDOW_MS of that account's FIRST record for this
+// (order, eventType); past that window even a forced resubmit is rejected. A different account (a
+// different warehouse the order also passes through) always gets its own independent record.
+async function recordScan({ vtpCode, eventType, location, note, eventTime, requestId, actorUserObjectId, force }) {
   if (!vtpCode) {
     throw new AppError('vtpCode là bắt buộc', 400);
   }
@@ -35,9 +39,15 @@ async function recordScan({ vtpCode, eventType, location, note, eventTime, reque
 
   const dedupeFilter = { orderId: order._id, source: 'scan_pda', eventType, actorUserId: actorUserObjectId };
 
-  const existing = await OrderEvent.findOne(dedupeFilter).lean();
-  if (existing) {
-    return { idempotent: true, event: existing, vtpCode };
+  const firstExisting = await OrderEvent.findOne(dedupeFilter).sort({ eventTime: 1 }).lean();
+  if (firstExisting) {
+    if (!force) {
+      return { idempotent: true, event: firstExisting, vtpCode };
+    }
+    if (Date.now() - new Date(firstExisting.eventTime).getTime() > RESCAN_WINDOW_MS) {
+      throw new AppError('Đã quá 24 giờ kể từ lần quét đầu tiên, không thể quét lại đơn này nữa', 403);
+    }
+    // Within the correction window - fall through and record a second, corrective event.
   }
 
   const contentHash = sha256Hex(
@@ -60,9 +70,9 @@ async function recordScan({ vtpCode, eventType, location, note, eventTime, reque
     });
   } catch (err) {
     if (err.code === 11000) {
-      // race: another concurrent request for the same (order, eventType, actor) won the insert
-      // first, between our pre-check above and this insert.
-      const race = await OrderEvent.findOne(dedupeFilter).lean();
+      // race: another request with the exact same contentHash (same vtpCode+eventType+actor+
+      // requestId+eventTime) won the insert first, between our pre-check above and this insert.
+      const race = await OrderEvent.findOne({ contentHash }).lean();
       if (race) {
         return { idempotent: true, event: race, vtpCode };
       }

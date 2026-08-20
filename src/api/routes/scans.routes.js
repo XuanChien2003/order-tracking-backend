@@ -30,11 +30,20 @@ const router = express.Router();
  *               requestId:
  *                 type: string
  *                 description: Khóa idempotency tùy chọn do client sinh (phòng khi thiết bị gửi lại do timeout mạng)
+ *               force:
+ *                 type: boolean
+ *                 description: >
+ *                   "Quét lại" - xác nhận rõ ràng của người dùng rằng họ biết đã có bản ghi
+ *                   (order, eventType) này từ tài khoản của họ và muốn ghi đè bằng 1 bản ghi mới
+ *                   (VD: quét nhầm loại sự kiện). Chỉ được phép trong vòng 24h kể từ bản ghi đầu
+ *                   tiên; mặc định false.
  *     responses:
  *       200:
- *         description: Ghi nhận thành công (idempotent=true nếu là bản ghi trùng lặp)
+ *         description: Ghi nhận thành công (idempotent=true nếu là bản ghi trùng lặp, chưa gửi force)
  *       400:
  *         description: Thiếu/sai vtpCode hoặc eventType
+ *       403:
+ *         description: force=true nhưng đã quá 24h kể từ lần quét đầu tiên
  *       404:
  *         description: Không tìm thấy đơn hàng với vtpCode này
  */

@@ -47,12 +47,13 @@ const forbidMutation = function forbidMutation() {
 );
 
 orderEventSchema.index({ orderId: 1, eventTime: -1 });
-// One warehouse account only ever gets one saved nhap_kho/xuat_kho/ban_giao per order - a
-// network failure + retry (or a duplicate manual/scan entry) must land on the same record, not
-// create a second one. See scan.service.js recordScan.
+// Not unique: a warehouse account gets one nhap_kho/xuat_kho/ban_giao per order by default (a
+// network retry or accidental duplicate is blocked in the service layer), but can create a
+// corrective second record within 24h of its first one (force=true, an explicit "Quét lại" from
+// the user) - see scan.service.js recordScan. Kept as a plain index for that lookup's performance.
 orderEventSchema.index(
   { orderId: 1, eventType: 1, actorUserId: 1 },
-  { unique: true, partialFilterExpression: { source: 'scan_pda' } }
+  { partialFilterExpression: { source: 'scan_pda' } }
 );
 // Scoped to actorUserId (not just source) - a requestId is only meaningful as "this device's
 // retry of its own request"; two different scanners coincidentally generating the same requestId

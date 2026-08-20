@@ -33,8 +33,6 @@ function toOrderPublic(order, partnerMap) {
     vat: order.vat ?? null,
     totalAmount: order.totalAmount ?? null,
     paymentType: order.paymentType || null,
-    actorName: order.actorName || null,
-    actorPhone: order.actorPhone || null,
     currentStatus: order.currentStatus,
     currentStatusDate: order.currentStatusDate,
     normalizedStatus: order.normalizedStatus || 'UNKNOWN',

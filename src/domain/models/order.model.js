@@ -19,8 +19,6 @@ const orderSchema = new mongoose.Schema(
     vat: { type: Number, default: 0 },
     totalAmount: { type: Number, default: 0 },
     paymentType: { type: String, default: 'Người gửi trả' },
-    actorName: { type: String, default: null },
-    actorPhone: { type: String, default: null },
     currentStatus: { type: String, required: true, default: ORDER_STATUS_DEFAULT },
     currentStatusDate: { type: Date, required: true },
     // Additive alongside currentStatus (free-text display) - a stable code for dashboards/filters

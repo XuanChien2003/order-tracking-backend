@@ -131,7 +131,14 @@ async function getOrderDetail({ requester, vtpCode }) {
 
   const [orderPublic] = await attachPartnerInfo([order]);
 
-  const events = await OrderEvent.find({ orderId: order._id }).sort({ eventTime: -1 }).lean();
+  // tra_cuu (lookup) is still saved to the scanner's own history (GET /scans/history) - just
+  // excluded from the order's own timeline here, since it's not a real logistics milestone.
+  const events = await OrderEvent.find({
+    orderId: order._id,
+    $nor: [{ source: 'scan_pda', eventType: 'tra_cuu' }],
+  })
+    .sort({ eventTime: -1 })
+    .lean();
   const actorIds = [...new Set(events.filter((e) => e.actorUserId).map((e) => String(e.actorUserId)))];
   const actors = actorIds.length
     ? await User.find({ _id: { $in: actorIds } }).select('publicId displayName').lean()

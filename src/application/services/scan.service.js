@@ -7,8 +7,11 @@ const AppError = require('../errors/AppError');
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
-// FR-05: scanner scans a code (value read = vtpCode). Dedup via contentHash -> idempotent 200, no new record.
-// No cap on number of scans per order.
+// FR-05: scanner scans a code (value read = vtpCode). One warehouse account (see
+// PROJECT_CONTEXT.md - one account per warehouse) only ever gets ONE saved record per
+// (order, eventType): a network failure + retry, or a duplicate manual/scan entry, must resolve
+// to that same record rather than creating a second one. A different account (a different
+// warehouse the order also passes through) still gets its own independent record.
 async function recordScan({ vtpCode, eventType, location, note, eventTime, requestId, actorUserObjectId }) {
   if (!vtpCode) {
     throw new AppError('vtpCode là bắt buộc', 400);
@@ -30,25 +33,16 @@ async function recordScan({ vtpCode, eventType, location, note, eventTime, reque
     throw new AppError('eventTime không được ở tương lai', 400);
   }
 
-  const contentHash = sha256Hex(
-    `scan:${vtpCode}:${eventType}:${String(actorUserObjectId)}:${requestId || ''}:${parsedEventTime.toISOString()}`
-  );
+  const dedupeFilter = { orderId: order._id, source: 'scan_pda', eventType, actorUserId: actorUserObjectId };
 
-  const existing = await OrderEvent.findOne({ contentHash }).lean();
+  const existing = await OrderEvent.findOne(dedupeFilter).lean();
   if (existing) {
     return { idempotent: true, event: existing, vtpCode };
   }
 
-  // Same requestId reused by this actor before but with different content (contentHash differs
-  // since it's derived from vtpCode+eventType+eventTime+etc) - that's a genuine conflict, not a
-  // network retry of the same request. Checked up front so the common case gets a clean 409
-  // instead of surfacing as an unstructured duplicate-key error.
-  if (requestId) {
-    const conflicting = await OrderEvent.findOne({ source: 'scan_pda', actorUserId: actorUserObjectId, requestId }).lean();
-    if (conflicting) {
-      throw new AppError('requestId đã được dùng với dữ liệu khác trước đó (idempotency conflict)', 409);
-    }
-  }
+  const contentHash = sha256Hex(
+    `scan:${vtpCode}:${eventType}:${String(actorUserObjectId)}:${requestId || ''}:${parsedEventTime.toISOString()}`
+  );
 
   let event;
   try {
@@ -66,15 +60,11 @@ async function recordScan({ vtpCode, eventType, location, note, eventTime, reque
     });
   } catch (err) {
     if (err.code === 11000) {
-      // race: another request with the same contentHash won the insert first
-      const race = await OrderEvent.findOne({ contentHash }).lean();
+      // race: another concurrent request for the same (order, eventType, actor) won the insert
+      // first, between our pre-check above and this insert.
+      const race = await OrderEvent.findOne(dedupeFilter).lean();
       if (race) {
         return { idempotent: true, event: race, vtpCode };
-      }
-      // race: another concurrent request with the same actorUserId+requestId (different
-      // content) won the insert first, between our pre-check above and this insert.
-      if (requestId) {
-        throw new AppError('requestId đã được dùng với dữ liệu khác trước đó (idempotency conflict)', 409);
       }
     }
     throw err;

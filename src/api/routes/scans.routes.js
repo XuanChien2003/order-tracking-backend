@@ -23,7 +23,7 @@ const router = express.Router();
  *             required: [vtpCode, eventType]
  *             properties:
  *               vtpCode: { type: string }
- *               eventType: { type: string, enum: [nhap_kho, xuat_kho, ban_giao, tra_cuu] }
+ *               eventType: { type: string, enum: [nhap_kho, xuat_kho, ban_giao] }
  *               location: { type: string }
  *               note: { type: string }
  *               eventTime: { type: string, format: date-time }

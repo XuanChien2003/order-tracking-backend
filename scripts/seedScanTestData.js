@@ -1,7 +1,7 @@
 // One-off helper to populate the (real, shared) database with clearly-tagged test data for
-// exercising the scan-history / dashboard-by-employee features end to end: 2 test scanner
+// exercising the scan-history / dashboard-by-order features end to end: 2 test scanner
 // accounts, 1 test partner, 5 test orders, and a spread of scan_pda events
-// (nhap_kho/xuat_kho/ban_giao/tra_cuu) across both scanners over the last few days.
+// (nhap_kho/xuat_kho/ban_giao) across both scanners over the last few days.
 //
 // Everything this script creates is prefixed "TEST" (usernames, order codes, partner name) so
 // it's easy to find and delete later without touching real data. Safe to re-run - it looks up
@@ -97,7 +97,6 @@ async function seedScanEvents(orders, scanners) {
   const plan = [
     [0, scannerA, 'nhap_kho', 4],
     [0, scannerA, 'xuat_kho', 3],
-    [0, scannerB, 'tra_cuu', 1],
     [1, scannerA, 'nhap_kho', 4],
     [1, scannerB, 'xuat_kho', 2],
     [1, scannerB, 'ban_giao', 1],
@@ -106,7 +105,6 @@ async function seedScanEvents(orders, scanners) {
     [2, scannerA, 'ban_giao', 0],
     [3, scannerA, 'nhap_kho', 2],
     [3, scannerB, 'nhap_kho', 2],
-    [3, scannerB, 'tra_cuu', 0],
     [4, scannerB, 'nhap_kho', 1],
     [4, scannerA, 'xuat_kho', 1],
     [4, scannerA, 'ban_giao', 0],

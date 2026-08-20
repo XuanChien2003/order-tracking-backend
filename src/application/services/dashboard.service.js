@@ -96,7 +96,7 @@ async function getDashboardStats({ requester }) {
 
 const SCAN_STATS_ORDER_LIMIT = 50;
 
-// Scan lượt quét: tổng theo loại sự kiện (nhap_kho/xuat_kho/ban_giao/tra_cuu) và theo từng
+// Scan lượt quét: tổng theo loại sự kiện (nhap_kho/xuat_kho/ban_giao) và theo từng
 // ĐƠN HÀNG (lịch sử quét của riêng đơn đó, kèm nhân viên quét gần nhất) - giới hạn
 // SCAN_STATS_ORDER_LIMIT đơn có hoạt động gần nhất, để admin quản lý hoạt động kho.
 async function getScanStats() {

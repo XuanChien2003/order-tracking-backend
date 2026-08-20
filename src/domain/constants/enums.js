@@ -1,12 +1,9 @@
 const USER_ROLES = ['admin', 'scanner', 'partner'];
 const PARTNER_STATUS = ['active', 'disabled'];
 const ORDER_EVENT_SOURCE = ['scan_pda', 'webhook_vtp', 'import'];
-// Movement events: change the order's currentStatus when recorded (see orderStatus.service.js).
-const SCAN_MOVEMENT_EVENT_TYPES = ['nhap_kho', 'xuat_kho', 'ban_giao'];
-// tra_cuu: scanner looked up an order without a movement action. Still logged as a scan_pda
-// event (so it shows in the scanner's own history), but must never affect Order.currentStatus.
-const SCAN_LOOKUP_EVENT_TYPE = 'tra_cuu';
-const SCAN_EVENT_TYPES = [...SCAN_MOVEMENT_EVENT_TYPES, SCAN_LOOKUP_EVENT_TYPE];
+// A pure lookup ("Chỉ xem thông tin") isn't a real event - it's not logged at all (see
+// GET /orders/:vtpCode, which the app scanner calls directly instead of POST /scans).
+const SCAN_EVENT_TYPES = ['nhap_kho', 'xuat_kho', 'ban_giao'];
 const WEBHOOK_STATUS = ['pending', 'processed', 'failed'];
 const ORDER_STATUS_DEFAULT = 'imported';
 
@@ -34,8 +31,6 @@ module.exports = {
   PARTNER_STATUS,
   ORDER_EVENT_SOURCE,
   SCAN_EVENT_TYPES,
-  SCAN_MOVEMENT_EVENT_TYPES,
-  SCAN_LOOKUP_EVENT_TYPE,
   WEBHOOK_STATUS,
   ORDER_STATUS_DEFAULT,
   ORDER_STATUS_NORMALIZED,

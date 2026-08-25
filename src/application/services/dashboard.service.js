@@ -94,81 +94,54 @@ async function getDashboardStats({ requester }) {
   };
 }
 
-const SCAN_STATS_ORDER_LIMIT = 50;
+const SCAN_STATS_RECENT_LIMIT = 50;
 
-// Scan lượt quét: tổng theo loại sự kiện (nhap_kho/xuat_kho/ban_giao) và theo từng
-// ĐƠN HÀNG (lịch sử quét của riêng đơn đó, kèm nhân viên quét gần nhất) - giới hạn
-// SCAN_STATS_ORDER_LIMIT đơn có hoạt động gần nhất, để admin quản lý hoạt động kho.
+// Scan lượt quét: tổng theo loại sự kiện (nhap_kho/xuat_kho) và nhật ký SCAN_STATS_RECENT_LIMIT
+// lượt quét gần nhất (mỗi dòng = 1 lượt quét thật, kèm đơn/nhân viên/vị trí/thời gian), để admin
+// theo dõi hoạt động kho theo trình tự thời gian thay vì chỉ xem số tổng theo đơn.
 async function getScanStats() {
-  const [byTypeAgg, byOrderTypeAgg, lastPerOrderAgg] = await Promise.all([
+  const [byTypeAgg, recentEventsRaw] = await Promise.all([
     OrderEvent.aggregate([
       { $match: { source: 'scan_pda' } },
       { $group: { _id: '$eventType', count: { $sum: 1 } } },
       { $project: { _id: 0, eventType: '$_id', count: 1 } },
     ]),
 
-    OrderEvent.aggregate([
-      { $match: { source: 'scan_pda' } },
-      { $group: { _id: { orderId: '$orderId', eventType: '$eventType' }, count: { $sum: 1 } } },
-    ]),
-
-    // $first after a $sort on eventTime picks the most recent event per order (a standard
-    // "latest row per group" pattern) - gives lastScanAt + who did it, per order.
-    OrderEvent.aggregate([
-      { $match: { source: 'scan_pda' } },
-      { $sort: { eventTime: -1 } },
-      {
-        $group: {
-          _id: '$orderId',
-          lastScanAt: { $first: '$eventTime' },
-          lastActorUserId: { $first: '$actorUserId' },
-        },
-      },
-      { $sort: { lastScanAt: -1 } },
-      { $limit: SCAN_STATS_ORDER_LIMIT },
-    ]),
+    OrderEvent.find({ source: 'scan_pda' })
+      .sort({ eventTime: -1 })
+      .limit(SCAN_STATS_RECENT_LIMIT)
+      .select('orderId eventType location actorUserId eventTime')
+      .lean(),
   ]);
 
-  const orderIds = lastPerOrderAgg.map((r) => String(r._id));
+  const orderIds = [...new Set(recentEventsRaw.map((e) => String(e.orderId)))];
   const orders = orderIds.length
     ? await Order.find({ _id: { $in: orderIds } }).select('vtpCode receiverName').lean()
     : [];
   const orderMap = new Map(orders.map((o) => [String(o._id), o]));
 
-  const actorIds = [...new Set(lastPerOrderAgg.filter((r) => r.lastActorUserId).map((r) => String(r.lastActorUserId)))];
+  const actorIds = [...new Set(recentEventsRaw.filter((e) => e.actorUserId).map((e) => String(e.actorUserId)))];
   const actors = actorIds.length
     ? await User.find({ _id: { $in: actorIds } }).select('username displayName').lean()
     : [];
   const actorMap = new Map(actors.map((a) => [String(a._id), a]));
 
-  // Reshape (orderId, eventType) rows into per-type counts keyed by orderId.
-  const countsByOrder = new Map();
-  for (const row of byOrderTypeAgg) {
-    const key = String(row._id.orderId);
-    if (!countsByOrder.has(key)) countsByOrder.set(key, {});
-    countsByOrder.get(key)[row._id.eventType] = row.count;
-  }
-
-  const byOrder = lastPerOrderAgg
-    .filter((r) => orderMap.has(String(r._id)))
-    .map((r) => {
-      const key = String(r._id);
-      const order = orderMap.get(key);
-      const counts = countsByOrder.get(key) || {};
-      const actor = r.lastActorUserId ? actorMap.get(String(r.lastActorUserId)) : null;
-      return {
-        vtpCode: order.vtpCode,
-        receiverName: order.receiverName,
-        byEventType: counts,
-        total: Object.values(counts).reduce((sum, c) => sum + c, 0),
-        lastScanAt: r.lastScanAt,
-        lastActorDisplayName: actor?.displayName || actor?.username || null,
-      };
-    });
+  const recentEvents = recentEventsRaw.map((e) => {
+    const order = orderMap.get(String(e.orderId));
+    const actor = e.actorUserId ? actorMap.get(String(e.actorUserId)) : null;
+    return {
+      vtpCode: order?.vtpCode || null,
+      receiverName: order?.receiverName || null,
+      eventType: e.eventType,
+      location: e.location,
+      actorDisplayName: actor?.displayName || actor?.username || null,
+      eventTime: e.eventTime,
+    };
+  });
 
   return {
     byEventType: byTypeAgg,
-    byOrder,
+    recentEvents,
   };
 }
 

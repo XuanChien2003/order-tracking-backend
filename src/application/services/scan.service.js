@@ -1,16 +1,12 @@
 const { Order, OrderEvent, Partner } = require('../../domain/models');
 const { sha256Hex } = require('../utils/hash.util');
-const { SCAN_EVENT_TYPES } = require('../../domain/constants/enums');
+const { SCAN_EVENT_TYPES, UNASSIGNED_PARTNER_PUBLIC_ID } = require('../../domain/constants/enums');
 const { refreshOrderCurrentStatus } = require('./orderStatus.service');
 const AppError = require('../errors/AppError');
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const RESCAN_WINDOW_MS = 24 * 60 * 60 * 1000;
-// Bucket Partner for orders auto-created from an unrecognized scan (see createMinimalOrderFromScan)
-// - not a real partner, never has a login account. Admin reassigns the real partner once the
-// partner's own import data catches up.
-const UNASSIGNED_PARTNER_PUBLIC_ID = 'UNASSIGNED';
 
 // FR-05: scanner scans a code (value read = vtpCode). One warehouse account (see
 // PROJECT_CONTEXT.md - one account per warehouse) gets one saved record per (order, eventType) by

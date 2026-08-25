@@ -7,6 +7,11 @@ const SCAN_EVENT_TYPES = ['nhap_kho', 'xuat_kho', 'ban_giao'];
 const WEBHOOK_STATUS = ['pending', 'processed', 'failed'];
 const ORDER_STATUS_DEFAULT = 'imported';
 
+// Bucket Partner for orders auto-created from an unrecognized nhap_kho scan (see
+// scan.service.js createMinimalOrderFromScan) - not a real partner, never has a login account.
+// Admin reassigns the real partner once the partner's own import data catches up.
+const UNASSIGNED_PARTNER_PUBLIC_ID = 'UNASSIGNED';
+
 // Fixed internal status set (list_các_lỗi_cần_sửa.md #4). currentStatus stays the free-text
 // display string (VTP's own wording, or the scan eventType) so nothing that already reads it
 // breaks; normalizedStatus is an additive field carrying one of these stable codes, meant for
@@ -34,4 +39,5 @@ module.exports = {
   WEBHOOK_STATUS,
   ORDER_STATUS_DEFAULT,
   ORDER_STATUS_NORMALIZED,
+  UNASSIGNED_PARTNER_PUBLIC_ID,
 };

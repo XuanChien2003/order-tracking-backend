@@ -1,4 +1,5 @@
 const { Order, Partner, OrderEvent, User } = require('../../domain/models');
+const { UNASSIGNED_PARTNER_PUBLIC_ID } = require('../../domain/constants/enums');
 const AppError = require('../errors/AppError');
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -114,9 +115,12 @@ async function getScanStats() {
       .lean(),
   ]);
 
+  const unassignedPartner = await Partner.findOne({ publicId: UNASSIGNED_PARTNER_PUBLIC_ID }).select('_id').lean();
+  const unassignedPartnerId = unassignedPartner ? String(unassignedPartner._id) : null;
+
   const orderIds = [...new Set(recentEventsRaw.map((e) => String(e.orderId)))];
   const orders = orderIds.length
-    ? await Order.find({ _id: { $in: orderIds } }).select('vtpCode receiverName').lean()
+    ? await Order.find({ _id: { $in: orderIds } }).select('vtpCode receiverName partnerId').lean()
     : [];
   const orderMap = new Map(orders.map((o) => [String(o._id), o]));
 
@@ -129,6 +133,10 @@ async function getScanStats() {
   const recentEvents = recentEventsRaw.map((e) => {
     const order = orderMap.get(String(e.orderId));
     const actor = e.actorUserId ? actorMap.get(String(e.actorUserId)) : null;
+    // "Mã mới": order is still sitting on the UNASSIGNED bucket partner, meaning it was
+    // auto-created by a scan on an unrecognized vtpCode (see scan.service.js
+    // createMinimalOrderFromScan) and the real partner hasn't imported/reassigned it yet.
+    const isNewCode = !!(order && unassignedPartnerId && String(order.partnerId) === unassignedPartnerId);
     return {
       vtpCode: order?.vtpCode || null,
       receiverName: order?.receiverName || null,
@@ -136,6 +144,7 @@ async function getScanStats() {
       location: e.location,
       actorDisplayName: actor?.displayName || actor?.username || null,
       eventTime: e.eventTime,
+      isNewCode,
     };
   });
 

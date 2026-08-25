@@ -1,5 +1,4 @@
 const { Order, Partner, OrderEvent, User } = require('../../domain/models');
-const { UNASSIGNED_PARTNER_PUBLIC_ID } = require('../../domain/constants/enums');
 const AppError = require('../errors/AppError');
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -115,14 +114,28 @@ async function getScanStats() {
       .lean(),
   ]);
 
-  const unassignedPartner = await Partner.findOne({ publicId: UNASSIGNED_PARTNER_PUBLIC_ID }).select('_id').lean();
-  const unassignedPartnerId = unassignedPartner ? String(unassignedPartner._id) : null;
-
   const orderIds = [...new Set(recentEventsRaw.map((e) => String(e.orderId)))];
   const orders = orderIds.length
-    ? await Order.find({ _id: { $in: orderIds } }).select('vtpCode receiverName partnerId').lean()
+    ? await Order.find({ _id: { $in: orderIds } }).select('vtpCode receiverName').lean()
     : [];
   const orderMap = new Map(orders.map((o) => [String(o._id), o]));
+
+  // "Mã mới": this event is literally the first OrderEvent (of ANY source) ever recorded for its
+  // order - which can only happen when the order didn't exist before this scan, i.e. the scan
+  // itself auto-created it (see scan.service.js createMinimalOrderFromScan). An order created via
+  // import always has an earlier 'import' event, so its scans never qualify. _id (not eventTime,
+  // which callers can backdate) is the ordering key since it reflects true insertion order.
+  const firstEventIdByOrder = orderIds.length
+    ? new Map(
+        (
+          await OrderEvent.aggregate([
+            { $match: { orderId: { $in: orders.map((o) => o._id) } } },
+            { $sort: { _id: 1 } },
+            { $group: { _id: '$orderId', firstEventId: { $first: '$_id' } } },
+          ])
+        ).map((r) => [String(r._id), String(r.firstEventId)])
+      )
+    : new Map();
 
   const actorIds = [...new Set(recentEventsRaw.filter((e) => e.actorUserId).map((e) => String(e.actorUserId)))];
   const actors = actorIds.length
@@ -133,10 +146,7 @@ async function getScanStats() {
   const recentEvents = recentEventsRaw.map((e) => {
     const order = orderMap.get(String(e.orderId));
     const actor = e.actorUserId ? actorMap.get(String(e.actorUserId)) : null;
-    // "Mã mới": order is still sitting on the UNASSIGNED bucket partner, meaning it was
-    // auto-created by a scan on an unrecognized vtpCode (see scan.service.js
-    // createMinimalOrderFromScan) and the real partner hasn't imported/reassigned it yet.
-    const isNewCode = !!(order && unassignedPartnerId && String(order.partnerId) === unassignedPartnerId);
+    const isNewCode = firstEventIdByOrder.get(String(e.orderId)) === String(e._id);
     return {
       vtpCode: order?.vtpCode || null,
       receiverName: order?.receiverName || null,

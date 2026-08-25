@@ -45,7 +45,10 @@ const router = express.Router();
  *       403:
  *         description: force=true nhưng đã quá 24h kể từ lần quét đầu tiên
  *       404:
- *         description: Không tìm thấy đơn hàng với vtpCode này
+ *         description: >
+ *           Không tìm thấy đơn hàng với vtpCode này - riêng eventType=nhap_kho thì KHÔNG trả 404,
+ *           mà tự tạo 1 đơn tối thiểu (gắn Partner "Chưa xác định") để không chặn kho biên giới
+ *           nhận hàng trước khi đối tác kịp import Excel
  */
 router.post('/', authenticate, authorize('scanner'), requireActiveAccount, scanLimiter, asyncHandler(scanController.createScan));
 

@@ -1,4 +1,5 @@
 const { Order, Partner, OrderEvent, User } = require('../../domain/models');
+const { UNASSIGNED_PARTNER_PUBLIC_ID } = require('../../domain/constants/enums');
 const AppError = require('../errors/AppError');
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -96,39 +97,60 @@ async function getDashboardStats({ requester }) {
 
 const SCAN_STATS_RECENT_LIMIT = 50;
 
-// Scan lượt quét: tổng theo loại sự kiện (nhap_kho/xuat_kho) và nhật ký SCAN_STATS_RECENT_LIMIT
-// lượt quét gần nhất (mỗi dòng = 1 lượt quét thật, kèm đơn/nhân viên/vị trí/thời gian), để admin
-// theo dõi hoạt động kho theo trình tự thời gian thay vì chỉ xem số tổng theo đơn.
+// Scan lượt quét: tổng theo loại sự kiện (nhap_kho/xuat_kho) và danh sách SCAN_STATS_RECENT_LIMIT
+// mã VTP có hoạt động quét gần nhất - mỗi mã VTP chỉ 1 dòng, hiện trạng thái/lượt quét MỚI NHẤT
+// của mã đó (không liệt kê lại toàn bộ lịch sử từng lượt quét).
 async function getScanStats() {
-  const [byTypeAgg, recentEventsRaw] = await Promise.all([
+  const [byTypeAgg, latestByOrderRaw] = await Promise.all([
     OrderEvent.aggregate([
       { $match: { source: 'scan_pda' } },
       { $group: { _id: '$eventType', count: { $sum: 1 } } },
       { $project: { _id: 0, eventType: '$_id', count: 1 } },
     ]),
 
-    OrderEvent.find({ source: 'scan_pda' })
-      .sort({ eventTime: -1 })
-      .limit(SCAN_STATS_RECENT_LIMIT)
-      .select('orderId eventType location actorUserId eventTime autoCreatedOrder')
-      .lean(),
+    // Group scan_pda events by order, keep only the latest one per order (sorted first so $first
+    // picks the newest), then re-sort/limit the resulting per-order rows themselves.
+    OrderEvent.aggregate([
+      { $match: { source: 'scan_pda' } },
+      { $sort: { eventTime: -1 } },
+      {
+        $group: {
+          _id: '$orderId',
+          eventType: { $first: '$eventType' },
+          location: { $first: '$location' },
+          actorUserId: { $first: '$actorUserId' },
+          eventTime: { $first: '$eventTime' },
+        },
+      },
+      { $sort: { eventTime: -1 } },
+      { $limit: SCAN_STATS_RECENT_LIMIT },
+    ]),
   ]);
 
-  const orderIds = [...new Set(recentEventsRaw.map((e) => String(e.orderId)))];
+  const unassignedPartner = await Partner.findOne({ publicId: UNASSIGNED_PARTNER_PUBLIC_ID }).select('_id').lean();
+  const unassignedPartnerId = unassignedPartner ? String(unassignedPartner._id) : null;
+
+  const orderIds = latestByOrderRaw.map((e) => String(e._id));
   const orders = orderIds.length
-    ? await Order.find({ _id: { $in: orderIds } }).select('vtpCode receiverName').lean()
+    ? await Order.find({ _id: { $in: orderIds } }).select('vtpCode receiverName partnerId').lean()
     : [];
   const orderMap = new Map(orders.map((o) => [String(o._id), o]));
 
-  const actorIds = [...new Set(recentEventsRaw.filter((e) => e.actorUserId).map((e) => String(e.actorUserId)))];
+  const actorIds = [...new Set(latestByOrderRaw.filter((e) => e.actorUserId).map((e) => String(e.actorUserId)))];
   const actors = actorIds.length
     ? await User.find({ _id: { $in: actorIds } }).select('username displayName').lean()
     : [];
   const actorMap = new Map(actors.map((a) => [String(a._id), a]));
 
-  const recentEvents = recentEventsRaw.map((e) => {
-    const order = orderMap.get(String(e.orderId));
+  const recentEvents = latestByOrderRaw.map((e) => {
+    const order = orderMap.get(String(e._id));
     const actor = e.actorUserId ? actorMap.get(String(e.actorUserId)) : null;
+    // "Mã mới": order is still sitting on the UNASSIGNED bucket partner - i.e. it was
+    // auto-created by an unrecognized scan (see scan.service.js createMinimalOrderFromScan) and
+    // hasn't been reconciled with the real partner's import yet. Since this view is now one row
+    // per code (its latest status), this reflects "does this code still need attention" rather
+    // than "was the code new at the time of this particular scan".
+    const isNewCode = !!(order && unassignedPartnerId && String(order.partnerId) === unassignedPartnerId);
     return {
       vtpCode: order?.vtpCode || null,
       receiverName: order?.receiverName || null,
@@ -136,7 +158,7 @@ async function getScanStats() {
       location: e.location,
       actorDisplayName: actor?.displayName || actor?.username || null,
       eventTime: e.eventTime,
-      isNewCode: !!e.autoCreatedOrder,
+      isNewCode,
     };
   });
 

@@ -110,7 +110,7 @@ async function getScanStats() {
     OrderEvent.find({ source: 'scan_pda' })
       .sort({ eventTime: -1 })
       .limit(SCAN_STATS_RECENT_LIMIT)
-      .select('orderId eventType location actorUserId eventTime')
+      .select('orderId eventType location actorUserId eventTime autoCreatedOrder')
       .lean(),
   ]);
 
@@ -119,23 +119,6 @@ async function getScanStats() {
     ? await Order.find({ _id: { $in: orderIds } }).select('vtpCode receiverName').lean()
     : [];
   const orderMap = new Map(orders.map((o) => [String(o._id), o]));
-
-  // "Mã mới": this event is literally the first OrderEvent (of ANY source) ever recorded for its
-  // order - which can only happen when the order didn't exist before this scan, i.e. the scan
-  // itself auto-created it (see scan.service.js createMinimalOrderFromScan). An order created via
-  // import always has an earlier 'import' event, so its scans never qualify. _id (not eventTime,
-  // which callers can backdate) is the ordering key since it reflects true insertion order.
-  const firstEventIdByOrder = orderIds.length
-    ? new Map(
-        (
-          await OrderEvent.aggregate([
-            { $match: { orderId: { $in: orders.map((o) => o._id) } } },
-            { $sort: { _id: 1 } },
-            { $group: { _id: '$orderId', firstEventId: { $first: '$_id' } } },
-          ])
-        ).map((r) => [String(r._id), String(r.firstEventId)])
-      )
-    : new Map();
 
   const actorIds = [...new Set(recentEventsRaw.filter((e) => e.actorUserId).map((e) => String(e.actorUserId)))];
   const actors = actorIds.length
@@ -146,7 +129,6 @@ async function getScanStats() {
   const recentEvents = recentEventsRaw.map((e) => {
     const order = orderMap.get(String(e.orderId));
     const actor = e.actorUserId ? actorMap.get(String(e.actorUserId)) : null;
-    const isNewCode = firstEventIdByOrder.get(String(e.orderId)) === String(e._id);
     return {
       vtpCode: order?.vtpCode || null,
       receiverName: order?.receiverName || null,
@@ -154,7 +136,7 @@ async function getScanStats() {
       location: e.location,
       actorDisplayName: actor?.displayName || actor?.username || null,
       eventTime: e.eventTime,
-      isNewCode,
+      isNewCode: !!e.autoCreatedOrder,
     };
   });
 

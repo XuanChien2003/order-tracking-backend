@@ -25,6 +25,7 @@ async function recordScan({ vtpCode, eventType, location, note, eventTime, reque
   }
 
   let order = await Order.findOne({ vtpCode }).select('_id').lean();
+  let autoCreatedOrder = false;
   if (!order) {
     // A border warehouse can physically receive a package before the partner's Excel import
     // catches up. Only nhap_kho (first touch) may create the order on the fly; xuat_kho/ban_giao
@@ -33,6 +34,7 @@ async function recordScan({ vtpCode, eventType, location, note, eventTime, reque
       throw new AppError('Không tìm thấy đơn hàng với vtpCode này', 404);
     }
     order = await createMinimalOrderFromScan(vtpCode);
+    autoCreatedOrder = true;
   }
 
   const parsedEventTime = eventTime ? new Date(eventTime) : new Date();
@@ -73,6 +75,7 @@ async function recordScan({ vtpCode, eventType, location, note, eventTime, reque
       requestId: requestId || null,
       eventTime: parsedEventTime,
       receivedAt: new Date(),
+      autoCreatedOrder,
     });
   } catch (err) {
     if (err.code === 11000) {

@@ -16,6 +16,12 @@ const orderEventSchema = new mongoose.Schema(
     externalStatus: { type: String, default: null },
     eventTime: { type: Date, required: true },
     receivedAt: { type: Date, required: true },
+    // True only for the one scan_pda event that itself caused Order.create() to run - i.e. this
+    // vtpCode did not exist in the DB before this scan (see scan.service.js
+    // createMinimalOrderFromScan). Set explicitly at write time rather than inferred later, so it
+    // stays correct regardless of event ordering/timing or whether the order's other history
+    // (e.g. an import event) happens to be missing.
+    autoCreatedOrder: { type: Boolean, default: false },
   },
   { timestamps: false }
 );
